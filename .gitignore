@@ -1,0 +1,84 @@
+# ---- OS ----
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+
+# ---- エディタ / IDE ----
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+# .vscode は devcontainer 定義や推奨拡張を共有するため一部を追跡する
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+
+# ---- 環境変数・機密情報（絶対にコミットしない） ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+credentials.json
+secrets.yaml
+
+# ---- 評価用の資料（リポジトリの成果物ではないため公開しない） ----
+/self-scoring.md
+/20YYMM_XXXX.md
+# 応募申請書を実際の年月・番号にリネームした場合も除外する
+/20[0-9][0-9][0-9][0-9]_*.md
+
+# ---- Go (api) ----
+/api/bin/
+/api/dist/
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+
+# ---- Node.js / TypeScript (web) ----
+node_modules/
+/web/.next/
+/web/out/
+/web/build/
+/web/dist/
+*.tsbuildinfo
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Python (prosody) ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- 形態素解析辞書（サイズが大きくビルド時に取得する） ----
+/prosody/dict/
+*.dic
+
+# ---- コンテナ / インフラ ----
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# ---- ローカル生成物 ----
+/tmp/
+/logs/
+*.log
