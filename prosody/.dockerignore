@@ -1,0 +1,21 @@
+# ビルドコンテキストを最小にする。
+# 不要なファイルを送るとビルドが遅くなり、キャッシュも無駄に無効化される。
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# テスト・型検査・lint のキャッシュ
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# イメージに入れる必要がないもの
+tests/
+Dockerfile
+.dockerignore
+README.md

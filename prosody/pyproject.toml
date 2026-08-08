@@ -1,0 +1,47 @@
+[project]
+name = "prosody"
+version = "0.1.0"
+description = "575 の五七五判定エンジン"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.52.1",
+    "pydantic==2.13.4",
+    # 形態素解析器と辞書（ADR-0003）
+    "sudachipy==0.6.11",
+    "sudachidict-core==20260723",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "httpx==0.28.1",
+    "ruff==0.16.2",
+    "mypy==2.3.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/prosody"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+# 詳細設計 04 のカバレッジ目標（prosody は C1 100%）を常時計測する
+addopts = "--cov=prosody --cov-branch --cov-report=term-missing"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+mypy_path = "src"
