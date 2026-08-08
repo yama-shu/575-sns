@@ -41,7 +41,19 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM"]
 
+[tool.ruff.lint.per-file-ignores]
+# テスト名は日本語で「何を確かめるか」を書く。pep8-naming（N802）は
+# 関数名が非 ASCII だと一律に違反と判定するため、テストに限って除外する。
+# 実装コードでは N802 を有効なままにする。
+"tests/**" = ["N802"]
+
 [tool.mypy]
 python_version = "3.13"
 strict = true
 mypy_path = "src"
+
+[[tool.mypy.overrides]]
+# SudachiPy は py.typed マーカーを持たないため、型情報を提供しない。
+# 解析器を差し替え可能にする設計（ADR-0003）により、依存はこの1箇所に閉じている。
+module = ["sudachipy.*"]
+ignore_missing_imports = true

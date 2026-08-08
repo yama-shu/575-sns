@@ -53,6 +53,6 @@ def test_辞書のロードに失敗したら起動せずに例外を送出す�
 
     monkeypatch.setattr(main, "_load_dictionary", 失敗する)
 
-    with pytest.raises(RuntimeError, match="辞書ファイルが見つかりません"):
-        with TestClient(app):
-            pass  # lifespan の実行中に落ちるため、ここには到達しない
+    # lifespan の実行中に落ちるため、with の本体には到達しない
+    with pytest.raises(RuntimeError, match="辞書ファイルが見つかりません"), TestClient(app):
+        pass
