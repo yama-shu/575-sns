@@ -1,0 +1,111 @@
+# 575 — ローカル実行用の構成
+#
+# このファイルは **本番相当のイメージ**（各 Dockerfile の runtime ステージ）で動かす。
+# 開発時のホットリロードやデバッグ用のポート公開は compose.override.yaml 側に置く。
+# compose.override.yaml は `docker compose up` で自動的に読み込まれるため、
+#
+#   docker compose up               → 開発用（ホットリロードあり）
+#   docker compose -f compose.yaml up → 本番相当（このファイルのみ）
+#
+# となる。詳細は README を参照。
+#
+# 環境変数は .env で上書きできる（.env.example を参照）。
+# 既定値は **ローカル開発専用** であり、本番では Kubernetes の Secret から注入する。
+
+# 引用符が必要。囲まないと YAML が数値として解釈し、compose が名前として受け付けない。
+name: "575"
+
+services:
+  db:
+    image: postgres:18-bookworm
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sns575}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
+      POSTGRES_DB: ${POSTGRES_DB:-sns575}
+      # 日本語データを扱うため、照合順序を明示する
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      # PostgreSQL 18 以降の公式イメージは、データをメジャーバージョン別の
+      # サブディレクトリ（/var/lib/postgresql/18/docker）に置く。
+      # 従来どおり /var/lib/postgresql/data をマウントすると起動に失敗するため、
+      # 1つ上の /var/lib/postgresql をマウントする。
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      # 接続を受け付けられる状態になってから api を起動させる
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sns575} -d ${POSTGRES_DB:-sns575}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  prosody:
+    build:
+      context: ./prosody
+      target: runtime
+    # dev と同じタグを使うと、最後にビルドした方のイメージを両モードで
+    # 共有してしまい、開発モードで runtime のイメージが起動する。
+    image: 575-prosody:runtime
+    environment:
+      PROSODY_LOG_LEVEL: ${PROSODY_LOG_LEVEL:-info}
+      PROSODY_SUDACHI_DICT: ${PROSODY_SUDACHI_DICT:-core}
+    # 本番では Ingress からルーティングせず、クラスタ内部からのみ到達可能とする
+    # （基本設計 01 §6）。ローカルでもそれに倣い、ポートを公開しない。
+    expose:
+      - "8000"
+    healthcheck:
+      # 辞書のロードが終わるまで false を返すため、/healthz ではなく /readyz を見る
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          sys.exit(0 if urllib.request.urlopen("http://localhost:8000/readyz").status == 200 else 1)
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      # 辞書のロードに時間がかかるため、その間は失敗回数に数えない
+      start_period: 60s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./api
+      target: runtime
+    # dev と同じタグを使うと、最後にビルドした方のイメージを両モードで
+    # 共有してしまい、開発モードで runtime のイメージが起動する。
+    image: 575-api:runtime
+    environment:
+      API_PORT: "8080"
+      API_DATABASE_URL: postgres://${POSTGRES_USER:-sns575}:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/${POSTGRES_DB:-sns575}?sslmode=disable
+      API_PROSODY_URL: http://prosody:8000
+      API_LOG_LEVEL: ${API_LOG_LEVEL:-info}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      prosody:
+        condition: service_healthy
+    # runtime は distroless（シェルを含まない）ため、コンテナ内での healthcheck を定義できない。
+    # 状態は外から `curl localhost:8080/readyz` で確認する。
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      target: runtime
+    # dev と同じタグを使うと、最後にビルドした方のイメージを両モードで
+    # 共有してしまい、開発モードで runtime のイメージが起動する。
+    image: 575-web:runtime
+    environment:
+      WEB_API_INTERNAL_URL: http://api:8080
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  db-data:

@@ -1,0 +1,63 @@
+# 575 — 開発用の差分
+#
+# `docker compose up` で compose.yaml と一緒に自動的に読み込まれる。
+# 本番相当で動かしたい場合は、このファイルを読ませずに実行する。
+#
+#   docker compose -f compose.yaml up --build
+#
+# ここに置くのは「開発のときだけ必要なもの」に限る。
+# 本番イメージに開発ツールが混入しないよう、ビルドターゲット自体を dev に切り替える。
+
+services:
+  db:
+    ports:
+      # 手元の psql や GUI クライアントから接続できるようにする
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  prosody:
+    build:
+      target: dev
+    image: 575-prosody:dev
+    volumes:
+      # ソースを書き換えると uvicorn --reload が拾って再起動する
+      - ./prosody/src:/app/src:cached
+      - ./prosody/tests:/app/tests:cached
+    environment:
+      PROSODY_LOG_LEVEL: ${PROSODY_LOG_LEVEL:-debug}
+    ports:
+      # 判定エンジンを単体で叩いて確認・ベンチマークするために公開する（開発時のみ）
+      - "${PROSODY_PORT:-8000}:8000"
+
+  api:
+    build:
+      target: dev
+    image: 575-api:dev
+    volumes:
+      # air がソースの変更を検知して再ビルドする
+      - ./api:/app:cached
+      # ビルド生成物をホストへ書き戻さない
+      - api-tmp:/app/tmp
+    environment:
+      API_LOG_LEVEL: ${API_LOG_LEVEL:-debug}
+
+  web:
+    build:
+      target: dev
+    image: 575-web:dev
+    volumes:
+      # ディレクトリごとマウントする。src だけだと tsconfig.json や eslint.config.mjs が
+      # コンテナ内に存在せず、typecheck / lint が実行できない。
+      - ./web:/app:cached
+      # node_modules と .next だけは名前付きボリュームで上書きし、
+      # ホスト（macOS）のバイナリがコンテナ（Linux）に被さらないようにする。
+      # ボリュームが空のときはイメージ内の内容で初期化されるため、
+      # イメージに焼き込んだ Linux 用の node_modules がそのまま使われる。
+      - web-node-modules:/app/node_modules
+      - web-next:/app/.next
+    environment:
+      WATCHPACK_POLLING: "true"
+
+volumes:
+  api-tmp:
+  web-node-modules:
+  web-next:
