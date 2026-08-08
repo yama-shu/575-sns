@@ -51,6 +51,8 @@
 ├── LICENSE
 ├── compose.yaml              # ローカル実行用（本番相当のイメージで動かす）
 ├── compose.override.yaml     # 開発用の差分（ホットリロード等。up で自動適用）
+├── .github/workflows/        # CI
+├── scripts/                  # 省力化スクリプト（check.sh など）
 ├── .env.example              # 環境変数の雛形。cp して .env を作る
 ├── web/                      # TypeScript / Next.js — 画面描画・SSR
 ├── api/                      # Go / Echo — 業務ロジック・永続化
@@ -211,6 +213,37 @@ docker compose run --rm web npm run lint
 
 カバレッジの目標は [NFR-05-04](docs/requirements/01-requirements.md#nfr-05-保守性運用性) にもとづき、
 prosody が C1 100%、api の usecase 層が 90% です。
+
+#### CI と同じ検査をまとめて実行する
+
+lint・型検査・テストを CI と同じ内容で流せます。**push する前にこれを通してください。**
+
+```bash
+./scripts/check.sh              # 3サービスすべて
+./scripts/check.sh prosody      # サービスを指定
+./scripts/check.sh api web
+```
+
+使うイメージとツールのバージョンは [CI](.github/workflows/ci.yml) と揃えてあるため、
+「手元では通ったのに CI で落ちる」が起きません。
+
+### CI
+
+Pull Request を作ると [CI](.github/workflows/ci.yml) が自動で走ります。
+
+| ジョブ | 内容 |
+| --- | --- |
+| 変更範囲の判定 | 変更されたサービスだけを実行する。共有の定義が変わった場合は全サービス |
+| prosody | ruff / ruff format / mypy / pytest（**C1 100% を下回ると失敗**）/ pip-audit |
+| api | gofmt / go vet / golangci-lint / go test / govulncheck |
+| web | eslint / tsc / next build / npm audit |
+| イメージのビルド | 各サービスの `runtime` を **ARM ランナー**でビルドする |
+| カバレッジの報告 | 結果を PR に1つのコメントとして投稿・更新する |
+| CI | 上記を集約する。ブランチ保護の required status check はこれを指定する |
+
+**イメージのビルドを ARM で行う理由**は、本番が OCI の ARM インスタンスで動くためです
+（[ADR-0004](docs/adr/0004-hosting-and-infrastructure.md)）。x86 でしか検証しないと、
+本番でのみ壊れる依存を見逃します。
 
 ### リリース方法
 
