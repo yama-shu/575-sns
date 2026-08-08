@@ -1,0 +1,18 @@
+# ビルドコンテキストを最小にする。
+# 不要なファイルを送るとビルドが遅くなり、キャッシュも無駄に無効化される。
+
+# ビルド生成物
+bin/
+dist/
+tmp/
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+
+# イメージに入れる必要がないもの
+Dockerfile
+.dockerignore
+.air.toml
+README.md
