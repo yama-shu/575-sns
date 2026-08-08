@@ -169,3 +169,79 @@ def test_空白を挟んだ本文のモーラ数が空白の有無で変わら�
     )
 
     assert with_spaces.total_mora == without.total_mora
+
+
+def test_A単位でも本文全体の形態素がそろう(tokenizer: SudachiTokenizer) -> None:
+    """Morpheme.split() を使った実装では、ここが壊れていた。
+
+    SudachiPy の Morpheme は MorphemeList への参照であり、
+    split() は親のリストを壊す。反復しながら split() を呼ぶと
+    最後に分割した形態素の結果しか残らない。
+
+        C単位: 古池 / や / 蛙 / 飛び込む / 水 / の / 音
+        split を使った A単位: 飛び / 込む      ← 全体が消えていた
+
+    表層を連結して本文に戻ることで、取りこぼしを検出する。
+    """
+    text = "古池や蛙飛び込む水の音"
+
+    for mode in (SplitMode.A, SplitMode.B, SplitMode.C):
+        tokens = tokenizer.tokenize(text, mode)
+        assert "".join(t.surface for t in tokens) == text, f"{mode} で本文に戻らない"
+
+
+def test_A単位はC単位以上に細かく分割される(tokenizer: SudachiTokenizer) -> None:
+    text = "選挙管理委員会で古池や蛙飛び込む"
+
+    coarse = tokenizer.tokenize(text, SplitMode.C)
+    fine = tokenizer.tokenize(text, SplitMode.A)
+
+    assert len(fine) > len(coarse)
+
+
+def test_単位境界はC単位の開始位置と一致する(tokenizer: SudachiTokenizer) -> None:
+    """A単位探索でのペナルティ（詳細設計 01 §9）が使う情報の正しさ。"""
+    text = "選挙管理委員会で古池や"
+
+    coarse = tokenizer.tokenize(text, SplitMode.C)
+    fine = tokenizer.tokenize(text, SplitMode.A)
+
+    # C単位の各形態素の開始位置
+    offset = 0
+    coarse_starts = []
+    for t in coarse:
+        coarse_starts.append(offset)
+        offset += len(t.surface)
+
+    offset = 0
+    for t in fine:
+        assert t.unit_boundary == (offset in coarse_starts), f"{t.surface} の境界判定が誤り"
+        offset += len(t.surface)
+
+
+def test_古池やはC単位のまま定型に区切れる(tokenizer: SudachiTokenizer) -> None:
+    """詳細設計 01 §8 の適用例。
+
+    設計書は当初「5/7/5 に区切れる形態素境界が存在しないため
+    C単位では NO_VALID_SPLIT になる」と記述していたが、実測では区切れる。
+    古池 = フルイケ = 4モーラ、飛び込む = トビコム = 4モーラであり、
+    設計書が挙げていた 3 と 5 は誤りだった。
+
+    ここは実装の正しさではなく**設計書の記述と実測の一致**を固定する。
+    """
+    from prosody.reading import ReadingResolver
+    from prosody.segment import SegmentSearcher
+    from prosody.verdict import Verdict
+
+    resolved = ReadingResolver().resolve(tokenizer.tokenize("古池や蛙飛び込む水の音", SplitMode.C))
+
+    assert [t.mora for t in resolved.tokens] == [4, 1, 3, 4, 2, 1, 2]
+    assert resolved.total_mora == 17
+
+    best = SegmentSearcher().best_for(resolved.tokens)
+
+    assert best is not None
+    assert (best.kami, best.naka, best.shimo) == (5, 7, 5)
+    assert best.verdict is Verdict.TEIKEI
+    # 古池や / 蛙飛び込む / 水の音
+    assert (best.kami_end, best.naka_end) == (2, 4)
