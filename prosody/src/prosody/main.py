@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import json  # 意図的な lint エラー（検証用）
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
