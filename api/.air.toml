@@ -1,0 +1,20 @@
+# air — 開発時のホットリロード設定
+# ソースを変更すると再ビルドし、プロセスを差し替える。
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/api ./cmd/api"
+bin = "./tmp/api"
+include_ext = ["go"]
+exclude_dir = ["tmp", "bin", "dist"]
+# 保存が連続したときに再ビルドを詰まらせない
+delay = 300
+stop_on_error = true
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = true
