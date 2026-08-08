@@ -64,19 +64,28 @@ class SudachiTokenizer:
         if not text:
             return []
 
-        # 常に C単位で解析する。A / B は C単位を分割して得る。
-        coarse = self._tokenizer.tokenize(text, SudachiSplitMode.C)
-
         if mode is SplitMode.C:
-            return [_to_token(morpheme, unit_boundary=True) for morpheme in coarse]
+            morphemes = self._tokenizer.tokenize(text, SudachiSplitMode.C)
+            return [_to_token(m, unit_boundary=True) for m in morphemes]
+
+        # A / B 単位のときは、C単位の開始位置を先に集めておき、
+        # 各形態素がそこから始まるかで単位境界を判定する。
+        #
+        # **Morpheme.split() を使ってはならない。** SudachiPy の Morpheme は
+        # MorphemeList への参照であり、split() は親のリストを壊す。
+        # 反復しながら split() を呼ぶと、最後に分割した形態素の結果しか残らない。
+        #
+        #   for m in tokenizer.tokenize(text, C):
+        #       parts = m.split(A)        ← ここで coarse 側が壊れる
+        #
+        # 文字オフセットで突き合わせれば、この副作用に依存せずに済む。
+        coarse_starts = {m.begin() for m in self._tokenizer.tokenize(text, SudachiSplitMode.C)}
 
         finer = SudachiSplitMode.A if mode is SplitMode.A else SudachiSplitMode.B
-        tokens: list[Token] = []
-        for morpheme in coarse:
-            # 分割の先頭だけが C単位の境界と一致する
-            for index, part in enumerate(morpheme.split(finer)):
-                tokens.append(_to_token(part, unit_boundary=index == 0))
-        return tokens
+        return [
+            _to_token(m, unit_boundary=m.begin() in coarse_starts)
+            for m in self._tokenizer.tokenize(text, finer)
+        ]
 
 
 def _to_token(morpheme: Any, *, unit_boundary: bool) -> Token:
