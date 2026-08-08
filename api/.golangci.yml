@@ -1,0 +1,31 @@
+# golangci-lint の設定
+#
+# 既定（standard）の linter 群に加えて、このプロダクトで踏みやすい誤りを
+# 検出するものを足している。数を増やすこと自体が目的ではないため、
+# 「なぜ有効にするか」を書けるものだけを入れる。
+
+version: "2"
+
+linters:
+  # errcheck / govet / ineffassign / staticcheck / unused
+  default: standard
+  enable:
+    # HTTP レスポンスボディの閉じ忘れを検出する。
+    # api は prosody を HTTP で呼ぶため、閉じ忘れは接続の枯渇に直結する。
+    - bodyclose
+    # errors.Is / errors.As を使わない型アサーションや比較を検出する。
+    # 詳細設計 03 でエラーを3分類して扱い分けるため、判定を誤ると分類が崩れる。
+    - errorlint
+    # ドキュメントもコメントも日本語だが、識別子とログのイベント名は英語のため。
+    - misspell
+
+  exclusions:
+    rules:
+      # テストでは戻り値を意図的に無視することがある
+      - path: _test\.go
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt

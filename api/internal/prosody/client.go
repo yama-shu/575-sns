@@ -39,7 +39,9 @@ func (c *Client) Ping(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("prosody へ到達できません: %w", err)
 	}
-	defer res.Body.Close()
+	// Close の失敗は呼び出し側にできることがないため無視する。
+	// ただし無視していることを明示する（暗黙に捨てない）。
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != http.StatusOK {
 		return fmt.Errorf("prosody が準備できていません: status=%d", res.StatusCode)

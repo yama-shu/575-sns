@@ -37,7 +37,10 @@ func run() error {
 		return err
 	}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}))
+	// 詳細設計 03 §3 の必須フィールド。3サービスのログが混ざるため service は必ず付ける。
+	logger := slog.New(
+		slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}),
+	).With("service", "api")
 	slog.SetDefault(logger)
 
 	// 接続プールの生成は接続の確立を待たない。DB が未起動でも api は起動し、
@@ -60,7 +63,7 @@ func run() error {
 	e.HidePort = true
 	e.Use(middleware.Recover())
 	e.Use(middleware.RequestID()) // 基本設計 01 §7: リクエスト ID をサービス間で引き回す
-	e.Use(middleware.Logger())
+	e.Use(requestLogger())
 
 	e.GET("/healthz", health.Healthz)
 	e.GET("/readyz", health.Readyz)
@@ -83,6 +86,40 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return e.Shutdown(ctx)
+}
+
+// requestLogger はアクセスログを構造化データとして出力するミドルウェアを返す。
+//
+// 詳細設計 03 §3 のとおり、`message` ではなく `event` で集計できるようにする。
+// 文言を変えてもログの集計が壊れないようにするためである。
+// リクエストボディは記録しない（投稿本文が含まれるため）。
+func requestLogger() echo.MiddlewareFunc {
+	return middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+		LogMethod:    true,
+		LogURI:       true,
+		LogStatus:    true,
+		LogLatency:   true,
+		LogRequestID: true,
+		LogError:     true,
+		HandleError:  true,
+		LogValuesFunc: func(_ echo.Context, v middleware.RequestLoggerValues) error {
+			attrs := []any{
+				"event", "http_request",
+				"request_id", v.RequestID,
+				"method", v.Method,
+				"path", v.URI,
+				"status", v.Status,
+				"duration_ms", v.Latency.Milliseconds(),
+			}
+			if v.Error != nil {
+				slog.Error("リクエストの処理に失敗しました",
+					append(attrs, "error_detail", v.Error.Error())...)
+				return nil
+			}
+			slog.Info("リクエストを処理しました", attrs...)
+			return nil
+		},
+	})
 }
 
 func parseLevel(name string) slog.Level {
