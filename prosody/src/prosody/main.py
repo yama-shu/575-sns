@@ -11,35 +11,38 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from prosody.config import Settings
+from prosody.tokenizer import Tokenizer
 
 logger = logging.getLogger("prosody")
 
 settings = Settings.from_env()
 
 
-def _load_dictionary(dict_type: str) -> Any:
-    """形態素解析辞書をメモリへ展開する。
+def _load_tokenizer(dict_type: str) -> Tokenizer:
+    """形態素解析器を組み立てる（辞書をメモリへ展開する）。
 
     詳細設計 02 §6 のとおり **遅延初期化しない**。
     起動時に同期的にロードすることで、複数リクエストによる二重ロードと、
     そのためのロックのオーバーヘッドを構造的に発生させない。
-    """
-    from sudachipy import Dictionary  # 起動時にのみ import する（辞書の展開が重いため）
 
-    return Dictionary(dict=dict_type)
+    SudachiPy の import をこの関数の中に置くのは、辞書の展開が重く、
+    起動時にのみ読み込みたいためである。
+    """
+    from prosody.sudachi import SudachiTokenizer
+
+    return SudachiTokenizer(dict_type=dict_type)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     started = time.perf_counter()
     try:
-        app.state.dictionary = _load_dictionary(settings.sudachi_dict)
+        app.state.tokenizer = _load_tokenizer(settings.sudachi_dict)
     except Exception:
         # 半端に起動して全リクエストを失敗させ続けるより、起動しない方がよい（詳細設計 02 §6）
         logger.critical("辞書のロードに失敗しました。プロセスを終了します。", exc_info=True)
@@ -52,7 +55,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     yield
 
-    app.state.dictionary = None
+    app.state.tokenizer = None
 
 
 app = FastAPI(
@@ -76,7 +79,7 @@ def readyz() -> JSONResponse:
     これを実装しないと、Pod の再起動やスケールアウトのたびに
     ロード中の Pod へトラフィックが流れてタイムアウトする（基本設計 05 §4）。
     """
-    loaded = getattr(app.state, "dictionary", None) is not None
+    loaded = getattr(app.state, "tokenizer", None) is not None
     body: dict[str, object] = {"ready": loaded, "dictionary_loaded": loaded}
     if loaded:
         body["dictionary_load_ms"] = round(app.state.dictionary_load_ms, 1)
