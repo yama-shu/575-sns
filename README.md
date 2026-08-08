@@ -23,12 +23,10 @@
 | 要件定義 | ✅ 完了 |
 | 基本設計 | ✅ 完了 |
 | 詳細設計 | ✅ 完了 |
-| 実装 | ⚪ 未着手（M0 / M1 のチケットを起票済み） |
+| 実装 | 🔵 進行中（M0 開発基盤） |
 
-本リポジトリは **設計フェーズ** です。現時点でソースコードは含まれておらず、
-`docs/` 配下の設計ドキュメントが成果物です。
-開発環境構築手順・ビルド方法・実行方法・テスト方法・リリース方法は、
-実装フェーズ開始時に本 README へ追記します（[docs/README.md](docs/README.md) の「README に将来追記する項目」を参照）。
+現在は **M0（開発基盤）** の段階です。各サービスは起動と疎通確認ができる骨組みまでで、
+五七五の判定ロジックは未実装です（[M1 のチケット](https://github.com/yama-shu/575-sns/milestone/2)で実装します）。
 
 ---
 
@@ -49,18 +47,186 @@
 
 ```
 .
-├── README.md              # このファイル
+├── README.md                 # このファイル
 ├── LICENSE
-├── .gitignore
+├── compose.yaml              # ローカル実行用（本番相当のイメージで動かす）
+├── compose.override.yaml     # 開発用の差分（ホットリロード等。up で自動適用）
+├── .env.example              # 環境変数の雛形。cp して .env を作る
+├── web/                      # TypeScript / Next.js — 画面描画・SSR
+├── api/                      # Go / Echo — 業務ロジック・永続化
+├── prosody/                  # Python / FastAPI — 五七五判定エンジン
 └── docs/
-    ├── README.md          # ドキュメント地図（ここから読む）
-    ├── requirements/      # 要件定義
+    ├── README.md             # ドキュメント地図（ここから読む）
+    ├── requirements/         # 要件定義
     ├── design/
-    │   ├── basic/         # 基本設計（構成図・ER図・画面遷移・API一覧）
-    │   └── detail/        # 詳細設計（アルゴリズム・クラス設計・エラー設計・テスト設計）
-    ├── adr/               # Architecture Decision Record（意思決定の記録）
-    └── issues/            # GitHub Issue 起票用ドラフト
+    │   ├── basic/            # 基本設計（構成図・ER図・画面遷移・API一覧）
+    │   └── detail/           # 詳細設計（アルゴリズム・クラス設計・エラー設計・テスト設計）
+    ├── adr/                  # Architecture Decision Record（意思決定の記録）
+    └── issues/               # GitHub Issue 起票用ドラフト
 ```
+
+サービスを3つに分けている理由は [ADR-0002](docs/adr/0002-tech-stack.md) にあります。
+要点は、形態素解析の辞書が数十〜数百 MB をメモリに常駐させるため、
+判定エンジンを api に同居させると api を増やすたびに辞書が複製されることです。
+
+---
+
+## 開発環境
+
+### 必要なもの
+
+**Docker と Docker Compose だけあれば動きます。** 各言語の処理系をホストへ入れる必要はありません。
+
+| ツール | バージョン | 用途 |
+| --- | --- | --- |
+| Docker Engine | 24.0 以上 | 全サービスの実行 |
+| Docker Compose | v2.21 以上 | 複数サービスの起動 |
+
+> **メモリ**: Docker に **4 GB 以上**を割り当ててください。
+> prosody が形態素解析の辞書をメモリへ展開するため、既定の 2 GB では起動に失敗することがあります。
+
+各サービスが使う処理系は以下です。**コンテナ内に閉じている**ため、
+ホストへのインストールは不要です（エディタの補完を効かせたい場合のみ入れてください）。
+
+| サービス | 言語 | 主要ライブラリ |
+| --- | --- | --- |
+| web | TypeScript / Node.js 24 (LTS) | Next.js 16 / React 19 |
+| api | Go 1.26 | Echo v4 / pgx v5 |
+| prosody | Python 3.13 | FastAPI / SudachiPy + SudachiDict-core |
+| db | PostgreSQL 18 | — |
+
+### 構築手順
+
+```bash
+git clone git@github.com:yama-shu/575-sns.git
+cd 575-sns
+cp .env.example .env        # 既定値のままで動くため、編集は任意
+docker compose up --build
+```
+
+初回はイメージのビルドと辞書の取得で 5〜10 分ほどかかります。2回目以降はキャッシュが効きます。
+
+起動したら http://localhost:3000 を開いてください。
+各サービスの疎通状況が表示されます。
+
+環境が壊れたときは、次のコマンドで完全に破棄してから作り直せます。
+
+```bash
+docker compose down -v      # コンテナとボリューム（DB のデータ）を削除する
+docker compose up --build
+```
+
+### 実行方法
+
+| コマンド | 動作 |
+| --- | --- |
+| `docker compose up` | **開発用**。ソースを編集すると自動で反映される（ホットリロード） |
+| `docker compose -f compose.yaml up --build` | **本番相当**。本番と同じイメージで動かす |
+| `docker compose logs -f prosody` | 特定サービスのログを追う |
+| `docker compose down` | 停止する（DB のデータは残る） |
+| `docker compose down -v` | 停止してデータも破棄する |
+
+`docker compose up` は [compose.override.yaml](compose.override.yaml) を自動的に読み込みます。
+開発時にだけ必要なもの（ホットリロード用のバインドマウント、デバッグ用のポート公開）は
+すべてそちらに寄せてあるため、**本番イメージに開発ツールが混入しません**。
+
+2つのモードは**別のイメージタグ**（`575-web:dev` と `575-web:runtime`）を使います。
+同じタグを共有すると、最後にビルドした方のイメージが両モードで使われてしまい、
+開発モードで起動したはずが本番イメージ（`node server.js`）が動く、という事故が起きます。
+
+> モードを切り替えるときは、先に `docker compose down` してください。
+> 同じホストポートを使うため、両方を同時には起動できません。
+
+### 公開されるポート
+
+| URL | サービス | 備考 |
+| --- | --- | --- |
+| http://localhost:3000 | web | |
+| http://localhost:8080/readyz | api | 依存先（db / prosody）への疎通状況を返す |
+| http://localhost:8000/readyz | prosody | **開発時のみ**公開。本番はクラスタ内部からのみ到達可能 |
+| `localhost:5432` | db | **開発時のみ**公開 |
+
+疎通はコマンドラインからも確認できます。
+
+```bash
+curl -s localhost:8080/readyz | jq
+# {"dependencies":{"database":true,"prosody":true},"ready":true}
+```
+
+### 設定方法
+
+設定値はコードに埋め込まず、**すべて環境変数**から読み込みます。
+ローカルでは [.env](.env.example) で、本番では Kubernetes の Secret / ConfigMap で与えます。
+
+`.env` が無くても [compose.yaml](compose.yaml) の既定値で起動します。変えたい項目だけ書いてください。
+
+| 環境変数 | 既定値 | 説明 |
+| --- | --- | --- |
+| `POSTGRES_USER` | `sns575` | DB のユーザ名 |
+| `POSTGRES_PASSWORD` | `local-dev-only` | DB のパスワード。**ローカル専用の値** |
+| `POSTGRES_DB` | `sns575` | DB 名 |
+| `POSTGRES_PORT` | `5432` | ホスト側に公開するポート |
+| `API_PORT` | `8080` | ホスト側に公開するポート |
+| `API_DATABASE_URL` | compose が組み立て | DB 接続文字列。**パスワードを含むためログに出さない** |
+| `API_PROSODY_URL` | `http://prosody:8000` | prosody の場所 |
+| `API_DATABASE_TIMEOUT` | `3s` | DB のタイムアウト |
+| `API_PROSODY_TIMEOUT` | `1s` | prosody のタイムアウト（[基本設計 01 §6](docs/design/basic/01-architecture.md#6-サービス間通信)） |
+| `API_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
+| `PROSODY_PORT` | `8000` | ホスト側に公開するポート |
+| `PROSODY_LOG_LEVEL` | `info` | ログレベル |
+| `PROSODY_SUDACHI_DICT` | `core` | 使用する SudachiDict（[ADR-0003](docs/adr/0003-morphological-analyzer.md)） |
+| `PROSODY_WORKERS` | `1` | 本番のワーカープロセス数。判定は CPU バウンドのため CPU 数に合わせる |
+| `WEB_PORT` | `3000` | ホスト側に公開するポート |
+| `WEB_API_INTERNAL_URL` | `http://api:8080` | SSR 時に web が api を呼ぶ先 |
+
+> **認証情報をコミットしないでください**（[NFR-04-07](docs/requirements/01-requirements.md#nfr-04-セキュリティ)）。
+> `.env` は [.gitignore](.gitignore) で除外済みです。`.env.example` には実在する値を書かないでください。
+
+### ビルド方法
+
+```bash
+docker compose -f compose.yaml build          # 本番相当のイメージを全サービス分
+docker compose -f compose.yaml build prosody  # 特定のサービスだけ
+```
+
+各 Dockerfile はマルチステージ構成です。`dev` と `runtime` を分けているため、
+本番イメージにはコンパイラ・テストツール・ホットリロードの仕組みが入りません。
+
+### テスト方法
+
+判定ロジックは M1 で実装します。現時点では起動確認のテストのみです。
+テストケースの設計は [詳細設計 04](docs/design/detail/04-test-design.md) にあります。
+
+```bash
+# prosody — pytest（カバレッジは pyproject.toml の設定で常時計測される）
+docker compose run --rm prosody pytest
+
+# api — go test
+docker compose run --rm api go test ./... -cover
+
+# web — 型検査と lint
+docker compose run --rm web npm run typecheck
+docker compose run --rm web npm run lint
+```
+
+カバレッジの目標は [NFR-05-04](docs/requirements/01-requirements.md#nfr-05-保守性運用性) にもとづき、
+prosody が C1 100%、api の usecase 層が 90% です。
+
+### リリース方法
+
+本番へのデプロイは M5 で整備します（[未起票のバックログ](docs/issues/README.md#未起票のバックログ)）。
+現時点でリリース版のイメージを手元で作る手順は以下です。
+
+```bash
+# 本番相当のイメージをタグ付きでビルドする
+docker build -t 575-sns/prosody:$(git describe --tags --always) --target runtime ./prosody
+docker build -t 575-sns/api:$(git describe --tags --always)     --target runtime ./api
+docker build -t 575-sns/web:$(git describe --tags --always)     --target runtime ./web
+```
+
+ARM（Apple Silicon / OCI Ampere A1）と x86 の両方で動かすため、
+[ADR-0004](docs/adr/0004-hosting-and-infrastructure.md) のとおり ARM での動作を前提としています。
+x86 のマシンで ARM 向けの動作を確認する場合は `--platform linux/arm64` を付けてください。
 
 ---
 
