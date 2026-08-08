@@ -33,3 +33,24 @@ class Verdict(StrEnum):
         投稿可能な判定がどれかは音数律の側の定義であるためここに置く。
         """
         return self in (Verdict.TEIKEI, Verdict.KYOYO)
+
+
+class Reason(StrEnum):
+    """`hacho` / `unknown` のときに、なぜそう判定したかを示す。
+
+    値は API のレスポンスでそのまま使う（基本設計 05）。
+    利用者への案内文を出し分けるために必要で、
+    「五七五になっていません」だけでは直しようがない。
+    """
+
+    TOO_FEW_MORA = "TOO_FEW_MORA"
+    """総モーラ数が少なすぎる。"""
+
+    TOO_MANY_MORA = "TOO_MANY_MORA"
+    """総モーラ数が多すぎる。"""
+
+    NO_VALID_SPLIT = "NO_VALID_SPLIT"
+    """モーラ数は範囲内だが、許容範囲に収まる区切りが見つからない。"""
+
+    READING_UNAVAILABLE = "READING_UNAVAILABLE"
+    """読みを取得できない語が含まれる。"""
