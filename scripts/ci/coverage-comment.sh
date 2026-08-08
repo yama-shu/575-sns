@@ -38,16 +38,15 @@ if [ -f "$prosody_json" ]; then
   rows="${rows}| prosody | ${pct}% | ${target}% | ${mark} |"$'\n'
 fi
 
-# api: go tool cover の出力（total 行）から取り出す
+# api: カバレッジプロファイルを直接集計する
+#
+# `go tool cover -func` を使わないのは、このスクリプトがリポジトリルートから
+# 実行され、そこに go.mod が無いため。cover はモジュール解決を要求して失敗する。
+# プロファイルの形式は「位置 文の数 実行回数」であり、集計に Go は要らない。
 api_out="${ARTIFACT_DIR}/coverage-api/coverage.out"
 if [ -f "$api_out" ]; then
-  if command -v go >/dev/null 2>&1; then
-    pct=$(go tool cover -func="$api_out" | awk '/^total:/ {gsub(/%/, "", $3); print $3}')
-  else
-    # go が無い環境では coverage.out を直接集計する
-    pct=$(awk 'NR > 1 { total += $2; if ($3 > 0) covered += $2 }
-               END { printf "%.1f", (total ? covered / total * 100 : 0) }' "$api_out")
-  fi
+  pct=$(awk 'NR > 1 { total += $2; if ($3 > 0) covered += $2 }
+             END { printf "%.1f", (total ? covered / total * 100 : 0) }' "$api_out")
   target=$(target_of api)
   mark=$(awk -v p="$pct" -v t="$target" 'BEGIN { print (p + 0 >= t + 0) ? "✅" : "⚠️" }')
   rows="${rows}| api | ${pct}% | ${target}% | ${mark} |"$'\n'
