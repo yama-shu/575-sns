@@ -1,0 +1,18 @@
+# ビルドコンテキストを最小にする。
+# node_modules を送るとコンテキスト転送だけで数百 MB になり、ビルドが著しく遅くなる。
+
+node_modules/
+.next/
+out/
+build/
+dist/
+coverage/
+
+# キャッシュ
+.eslintcache
+*.tsbuildinfo
+
+# イメージに入れる必要がないもの
+Dockerfile
+.dockerignore
+README.md
