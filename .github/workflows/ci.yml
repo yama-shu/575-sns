@@ -1,0 +1,283 @@
+# 575 の CI
+#
+# このプロダクトの特性に合わせて、次の3点を設計している。
+#
+# 1. **3言語（TypeScript / Go / Python）が1リポジトリに同居する**
+#    → 変更のあったサービスだけを実行する。prosody だけの変更で web のビルドを待たない。
+#      ただしサービス間の契約（compose 定義・CI 自体・共有スクリプト）が変わった場合は
+#      全サービスを回す。ここを間違えると、契約変更で壊れたサービスを見逃す。
+#
+# 2. **prosody がプロダクトの中核で、C1 100% を目標にしている（NFR-05-04）**
+#    → カバレッジを計測するだけでなく、100% を下回ったら失敗させる。
+#
+# 3. **本番は ARM（OCI Ampere A1）で動く（ADR-0004）**
+#    → イメージのビルド検証は ARM ランナーで行う。x86 でしか検証しないと、
+#      本番でのみ壊れる依存を見逃す。
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  # マージ後の main の状態も確認する（PR 単体では緑でも、マージで壊れることがある）
+  push:
+    branches: [main]
+
+# 同じブランチで CI が走っている最中に push したら、古い実行を打ち切る
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ------------------------------------------------------------------
+  # どのサービスを検査する必要があるかを判定する
+  # ------------------------------------------------------------------
+  changes:
+    name: 変更範囲の判定
+    runs-on: ubuntu-latest
+    outputs:
+      prosody: ${{ steps.filter.outputs.prosody }}
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+      services: ${{ steps.matrix.outputs.services }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            shared: &shared
+              - '.github/workflows/ci.yml'
+              - 'compose.yaml'
+              - 'compose.override.yaml'
+              - '.env.example'
+              - 'scripts/**'
+            prosody:
+              - *shared
+              - 'prosody/**'
+            api:
+              - *shared
+              - 'api/**'
+            web:
+              - *shared
+              - 'web/**'
+
+      - name: イメージビルド対象の一覧をつくる
+        id: matrix
+        run: |
+          services=()
+          [ "${{ steps.filter.outputs.prosody }}" = "true" ] && services+=('"prosody"')
+          [ "${{ steps.filter.outputs.api }}" = "true" ] && services+=('"api"')
+          [ "${{ steps.filter.outputs.web }}" = "true" ] && services+=('"web"')
+          IFS=,
+          echo "services=[${services[*]}]" >> "$GITHUB_OUTPUT"
+
+  # ------------------------------------------------------------------
+  # prosody（Python / FastAPI）
+  # ------------------------------------------------------------------
+  prosody:
+    name: prosody
+    needs: changes
+    if: needs.changes.outputs.prosody == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: prosody
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v9
+        with:
+          enable-cache: true
+          cache-dependency-glob: prosody/uv.lock
+
+      - name: 依存を解決する
+        run: uv sync --frozen
+
+      - name: lint
+        run: uv run ruff check .
+
+      - name: 整形の確認
+        run: uv run ruff format --check .
+
+      - name: 型検査
+        run: uv run mypy src
+
+      # NFR-05-04 の目標を「計測するだけ」にせず、下回ったら失敗させる
+      - name: 単体テスト（C1 100% を下回ったら失敗）
+        run: uv run pytest --cov-fail-under=100 --cov-report=term --cov-report=json:coverage.json
+
+      - name: 依存の脆弱性検査
+        run: |
+          uv export --frozen --no-dev --format requirements-txt --no-emit-project > requirements.txt
+          uvx pip-audit==2.10.1 --requirement requirements.txt
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-prosody
+          path: prosody/coverage.json
+          retention-days: 7
+
+  # ------------------------------------------------------------------
+  # api（Go / Echo）
+  # ------------------------------------------------------------------
+  api:
+    name: api
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: api/go.mod
+          cache-dependency-path: api/go.sum
+
+      - name: 整形の確認
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt が必要なファイル:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
+          working-directory: api
+
+      - name: 単体テスト
+        run: go test ./... -covermode=atomic -coverprofile=coverage.out
+
+      - name: カバレッジを集計する
+        run: go tool cover -func=coverage.out | tail -1
+
+      - name: 依存の脆弱性検査
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-api
+          path: api/coverage.out
+          retention-days: 7
+
+  # ------------------------------------------------------------------
+  # web（TypeScript / Next.js）
+  # ------------------------------------------------------------------
+  web:
+    name: web
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: 依存を入れる
+        run: npm ci
+
+      - name: lint
+        run: npm run lint
+
+      - name: 型検査
+        run: npm run typecheck
+
+      - name: ビルド
+        run: npm run build
+
+      - name: 依存の脆弱性検査
+        run: npm audit --audit-level=high
+
+  # ------------------------------------------------------------------
+  # 本番イメージのビルド確認（ARM）
+  # ------------------------------------------------------------------
+  images:
+    name: イメージのビルド (${{ matrix.service }})
+    needs: changes
+    if: needs.changes.outputs.services != '[]'
+    # 本番は OCI の ARM インスタンスで動く（ADR-0004）。
+    # x86 でしか検証しないと、本番でのみ壊れる依存を見逃す。
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: runtime ステージをビルドする
+        uses: docker/build-push-action@v7
+        with:
+          context: ./${{ matrix.service }}
+          target: runtime
+          push: false
+          load: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # ------------------------------------------------------------------
+  # カバレッジを PR にコメントする
+  # ------------------------------------------------------------------
+  report:
+    name: カバレッジの報告
+    needs: [changes, prosody, api, web]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          pattern: coverage-*
+          merge-multiple: false
+
+      - name: コメントを投稿・更新する
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: ./scripts/ci/coverage-comment.sh artifacts
+
+  # ------------------------------------------------------------------
+  # 集約。ブランチ保護の required status check にはこれ1つを指定する
+  # ------------------------------------------------------------------
+  ci:
+    name: CI
+    needs: [changes, prosody, api, web, images]
+    # 変更範囲によってスキップされるジョブがあるため、常に実行して結果を集約する
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: すべてのジョブが success か skipped であることを確認する
+        run: |
+          echo '${{ toJSON(needs) }}' | jq .
+          echo '${{ toJSON(needs) }}' \
+            | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null
