@@ -49,6 +49,9 @@ services:
     environment:
       PROSODY_LOG_LEVEL: ${PROSODY_LOG_LEVEL:-info}
       PROSODY_SUDACHI_DICT: ${PROSODY_SUDACHI_DICT:-core}
+      # 判定は CPU バウンドのため、ワーカー数は割り当て CPU に合わせる
+      # （NFR-03-03）。1 のままだと同時接続を受けきれず接続がリセットされる。
+      PROSODY_WORKERS: ${PROSODY_WORKERS:-1}
     # 本番では Ingress からルーティングせず、クラスタ内部からのみ到達可能とする
     # （基本設計 01 §6）。ローカルでもそれに倣い、ポートを公開しない。
     expose:
