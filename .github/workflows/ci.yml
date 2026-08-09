@@ -111,6 +111,18 @@ jobs:
       - name: 単体テスト（C1 100% を下回ったら失敗）
         run: uv run pytest --cov-fail-under=100 --cov-report=term --cov-report=json:coverage.json
 
+      # api（Go）と web（TypeScript）はこの定義を契約として型を生成するため、
+      # 定義の更新漏れは実行時まで気づけない（ADR-0002）。
+      - name: OpenAPI 定義が最新であることを確認する
+        run: |
+          uv run python -c "
+          import json
+          from prosody.main import app
+          print(json.dumps(app.openapi(), ensure_ascii=False, indent=2, sort_keys=True))
+          " > /tmp/openapi.json
+          diff -u openapi.json /tmp/openapi.json \
+            || { echo '::error::openapi.json が最新ではありません。./scripts/openapi.sh を実行してください。'; exit 1; }
+
       - name: 依存の脆弱性検査
         run: |
           uv export --frozen --no-dev --format requirements-txt --no-emit-project > requirements.txt
