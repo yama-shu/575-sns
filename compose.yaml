@@ -107,6 +107,12 @@ services:
       API_DATABASE_URL: postgres://${POSTGRES_USER:-sns575}:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/${POSTGRES_DB:-sns575}?sslmode=disable
       API_PROSODY_URL: http://prosody:8000
       API_LOG_LEVEL: ${API_LOG_LEVEL:-info}
+      # 以下は README に記載があるが compose が渡しておらず、設定しても効かなかった。
+      # 既定値はアプリ側と同じ値を明示する（#9 の PROSODY_WORKERS と同じ不具合）。
+      API_DATABASE_TIMEOUT: ${API_DATABASE_TIMEOUT:-3s}
+      API_PROSODY_TIMEOUT: ${API_PROSODY_TIMEOUT:-1s}
+      API_SECURE_COOKIE: ${API_SECURE_COOKIE:-false}
+      API_BCRYPT_COST: ${API_BCRYPT_COST:-12}
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:
