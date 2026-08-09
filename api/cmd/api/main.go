@@ -21,7 +21,10 @@ import (
 
 	"github.com/yama-shu/575-sns/api/internal/config"
 	"github.com/yama-shu/575-sns/api/internal/handler"
+	"github.com/yama-shu/575-sns/api/internal/infra/postgres"
+	"github.com/yama-shu/575-sns/api/internal/password"
 	"github.com/yama-shu/575-sns/api/internal/prosody"
+	"github.com/yama-shu/575-sns/api/internal/usecase"
 )
 
 func main() {
@@ -65,8 +68,24 @@ func run() error {
 	e.Use(middleware.RequestID()) // 基本設計 01 §7: リクエスト ID をサービス間で引き回す
 	e.Use(requestLogger())
 
+	// 依存を組み立てるのはここだけ。usecase は PostgreSQL を知らず、
+	// domain が定義したインターフェースに対して操作する（詳細設計 02 §2）。
+	authUsecase := usecase.NewAuth(
+		postgres.NewUserRepository(pool),
+		postgres.NewSessionRepository(pool),
+		password.NewHasher(cfg.BcryptCost),
+		time.Now,
+	)
+	authHandler := handler.NewAuth(authUsecase, cfg.SecureCookie)
+
 	e.GET("/healthz", health.Healthz)
 	e.GET("/readyz", health.Readyz)
+
+	v1 := e.Group("/api/v1")
+	v1.POST("/auth/signup", authHandler.SignUp)
+	v1.POST("/auth/login", authHandler.LogIn)
+	v1.POST("/auth/logout", authHandler.LogOut)
+	v1.GET("/me", authHandler.Me, handler.RequireAuth(authUsecase))
 
 	address := fmt.Sprintf(":%d", cfg.Port)
 	go func() {

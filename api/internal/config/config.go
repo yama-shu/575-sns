@@ -22,6 +22,15 @@ type Config struct {
 	// NFR-01-01 の 150ms に対して十分な余裕があり、これを超えるのは異常である。
 	ProsodyTimeout time.Duration
 	LogLevel       string
+	// SecureCookie はセッション Cookie に Secure を付けるか。
+	//
+	// **本番では必ず true。** ローカル開発は HTTP のため false にしないと
+	// ブラウザが Cookie を保存せず、ログインできない。
+	SecureCookie bool
+	// BcryptCost はパスワードのハッシュ化コスト。
+	//
+	// 0 なら既定値を使う。テストでは下げて実行時間を抑える。
+	BcryptCost int
 }
 
 // Load は環境変数から設定を組み立てる。必須項目が欠けていれば error を返す。
@@ -44,6 +53,15 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("環境変数 API_DATABASE_URL が設定されていません")
 	}
 
+	secureCookie, err := boolFromEnv("API_SECURE_COOKIE", false)
+	if err != nil {
+		return Config{}, err
+	}
+	bcryptCost, err := intFromEnv("API_BCRYPT_COST", 0)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		Port:            port,
 		DatabaseURL:     databaseURL,
@@ -51,7 +69,21 @@ func Load() (Config, error) {
 		ProsodyURL:      stringFromEnv("API_PROSODY_URL", "http://prosody:8000"),
 		ProsodyTimeout:  prosodyTimeout,
 		LogLevel:        stringFromEnv("API_LOG_LEVEL", "info"),
+		SecureCookie:    secureCookie,
+		BcryptCost:      bcryptCost,
 	}, nil
+}
+
+func boolFromEnv(key string, fallback bool) (bool, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback, nil
+	}
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("環境変数 %s は真偽値である必要があります: %w", key, err)
+	}
+	return v, nil
 }
 
 func stringFromEnv(key, fallback string) string {
