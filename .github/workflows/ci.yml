@@ -146,6 +146,27 @@ jobs:
     defaults:
       run:
         working-directory: api
+
+    # 結合テストを実際に走らせるための DB。
+    # 書いただけで実行されないテストは、壊れても気づけない。
+    services:
+      postgres:
+        image: postgres:18-bookworm
+        env:
+          POSTGRES_USER: sns575
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: sns575
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sns575 -d sns575"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      API_DATABASE_URL: postgres://sns575:ci-only@localhost:5432/sns575?sslmode=disable
+
     steps:
       - uses: actions/checkout@v7
 
@@ -172,7 +193,10 @@ jobs:
           version: v2.12.2
           working-directory: api
 
-      - name: 単体テスト
+      - name: マイグレーションを適用する
+        run: go run ./cmd/migrate up
+
+      - name: 単体テストと結合テスト
         run: go test ./... -covermode=atomic -coverprofile=coverage.out
 
       - name: カバレッジを集計する
