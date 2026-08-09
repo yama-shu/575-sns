@@ -24,6 +24,7 @@ import (
 	"github.com/yama-shu/575-sns/api/internal/infra/postgres"
 	"github.com/yama-shu/575-sns/api/internal/password"
 	"github.com/yama-shu/575-sns/api/internal/prosody"
+	"github.com/yama-shu/575-sns/api/internal/requestid"
 	"github.com/yama-shu/575-sns/api/internal/usecase"
 )
 
@@ -54,10 +55,15 @@ func run() error {
 	}
 	defer pool.Close()
 
+	// 判定エンジンへのクライアントは1つだけ作る。
+	// **サーキットブレーカーの状態を共有するため。** リクエストごとに作ると、
+	// 失敗の観測が毎回リセットされて遮断器が機能しない。
+	prosodyClient := prosody.New(cfg.ProsodyURL, prosody.Options{Timeout: cfg.ProsodyTimeout})
+
 	health := &handler.Health{
 		DB:             pool,
 		DBTimeout:      cfg.DatabaseTimeout,
-		Prosody:        prosody.New(cfg.ProsodyURL, cfg.ProsodyTimeout),
+		Prosody:        prosodyClient,
 		ProsodyTimeout: cfg.ProsodyTimeout,
 	}
 
@@ -66,6 +72,7 @@ func run() error {
 	e.HidePort = true
 	e.Use(middleware.Recover())
 	e.Use(middleware.RequestID()) // 基本設計 01 §7: リクエスト ID をサービス間で引き回す
+	e.Use(propagateRequestID())
 	e.Use(requestLogger())
 
 	// 依存を組み立てるのはここだけ。usecase は PostgreSQL を知らず、
@@ -77,6 +84,7 @@ func run() error {
 		time.Now,
 	)
 	authHandler := handler.NewAuth(authUsecase, cfg.SecureCookie)
+	prosodyHandler := handler.NewProsody(usecase.NewProsody(prosodyClient))
 
 	e.GET("/healthz", health.Healthz)
 	e.GET("/readyz", health.Readyz)
@@ -86,6 +94,7 @@ func run() error {
 	v1.POST("/auth/login", authHandler.LogIn)
 	v1.POST("/auth/logout", authHandler.LogOut)
 	v1.GET("/me", authHandler.Me, handler.RequireAuth(authUsecase))
+	v1.POST("/prosody/check", prosodyHandler.Check, handler.RequireAuth(authUsecase))
 
 	address := fmt.Sprintf(":%d", cfg.Port)
 	go func() {
@@ -105,6 +114,21 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return e.Shutdown(ctx)
+}
+
+// propagateRequestID は echo が採番したリクエスト ID を context に載せる。
+//
+// 下流（prosody）を呼ぶ層は echo.Context を持たない。
+// context に載せておかないと、api で切れて 3サービスのログが繋がらない。
+func propagateRequestID() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			id := c.Response().Header().Get(echo.HeaderXRequestID)
+			req := c.Request()
+			c.SetRequest(req.WithContext(requestid.With(req.Context(), id)))
+			return next(c)
+		}
+	}
 }
 
 // requestLogger はアクセスログを構造化データとして出力するミドルウェアを返す。

@@ -37,6 +37,9 @@ var statusOf = map[domain.ErrorCode]int{
 	domain.CodeNotFound:           http.StatusNotFound,
 	domain.CodeHandleTaken:        http.StatusConflict,
 	domain.CodeEmailTaken:         http.StatusConflict,
+	// 異常なエラー（詳細設計 03 §2）。
+	domain.CodeProsodyUnavailable: http.StatusServiceUnavailable,
+	domain.CodeUpstreamTimeout:    http.StatusGatewayTimeout,
 }
 
 // logLevelOf はエラーコードに対応するログレベル（詳細設計 03 §2）。
@@ -44,6 +47,10 @@ var statusOf = map[domain.ErrorCode]int{
 // 利用者の入力ミスで通知が飛ぶと、通知が意味を失う。
 // FORBIDDEN だけ WARN にするのは、攻撃の兆候でありうるためである。
 func logLevelOf(code domain.ErrorCode) slog.Level {
+	// システム起因のものは ERROR。継続していれば人に届く必要がある。
+	if code.IsAbnormal() {
+		return slog.LevelError
+	}
 	if code == domain.CodeForbidden {
 		return slog.LevelWarn
 	}
