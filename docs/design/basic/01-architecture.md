@@ -3,8 +3,8 @@
 | 項目 | 内容 |
 | --- | --- |
 | ドキュメント種別 | 基本設計 |
-| 前提 | [ADR-0002](../../adr/0002-tech-stack.md) / [ADR-0004](../../adr/0004-hosting-and-infrastructure.md) |
-| 最終更新 | 2026-08-06 |
+| 前提 | [ADR-0002](../../adr/0002-tech-stack.md) / [ADR-0007](../../adr/0007-hosting-conoha-vps.md) |
+| 最終更新 | 2026-08-09 |
 
 ---
 
@@ -18,7 +18,7 @@ flowchart TB
         CF["Cloudflare<br/>DNS / TLS 終端 / 静的キャッシュ"]
     end
 
-    subgraph cluster["k3s クラスタ（OCI Always Free）"]
+    subgraph cluster["k3s クラスタ（ConoHa VPS 2 GB・単一ノード）"]
         direction TB
         ING["Ingress（Traefik）<br/>ルーティング / Let's Encrypt"]
 
@@ -35,11 +35,11 @@ flowchart TB
 
         subgraph ops["運用"]
             MON["Prometheus / Grafana"]
-            ERR["GlitchTip"]
         end
     end
 
-    OBJ[("OCI Object Storage<br/>バックアップ")]
+    ERR["Sentry<br/>（無料枠・外部）"]
+    OBJ[("Cloudflare R2<br/>バックアップ")]
 
     U -->|HTTPS| CF --> ING
     ING -->|"/"| WEB
@@ -238,11 +238,24 @@ flowchart LR
 | web | 2 | CPU 使用率 | ステートレス |
 | api | 2 | CPU 使用率 | ステートレス |
 | prosody | 2 | **CPU 使用率**（判定は CPU バウンド） | ステートレス |
-| db | 1 | スケールしない | **ステートフル**（[ADR-0004 §6](../../adr/0004-hosting-and-infrastructure.md#6-nfr-02可用性に対する正直な評価) のとおり単一障害点） |
+| db | 1 | スケールしない | **ステートフル**（[ADR-0007 §8](../../adr/0007-hosting-conoha-vps.md#8-nfr-02可用性に対する正直な評価) のとおり単一障害点） |
 
-レプリカ数を 2 とするのは、[NFR-02-02](../../requirements/01-requirements.md#nfr-02-可用性)
-（単一ノード障害での全断回避）を満たす最小値であるため。
-各 Pod は異なるノードに配置する（Pod Anti-Affinity）。
+レプリカ数を 2 とするのは、**プロセス単位の耐性**を確保するためである。
+1つの Pod が落ちても、もう1つが処理を継続する。
+
+**ただし、これは [NFR-02-02](../../requirements/01-requirements.md#nfr-02-可用性)
+（単一サーバー障害での全断回避）を満たすものではない。**
+[ADR-0007](../../adr/0007-hosting-conoha-vps.md) のとおり本構成は単一ノードであり、
+レプリカはすべて同一ホスト上に配置される。ノードが落ちれば全 Pod が同時に落ちる。
+Pod Anti-Affinity はノードが1つしかないため機能しない（設定すると Pod が起動できなくなる）。
+
+`replicas` は決め打ちにせず、ノードを追加した時点で値を変えるだけで
+ノードレベルの冗長化に移行できる状態を保つ。
+
+prosody は `PROSODY_WORKERS=1` とし、並列度はレプリカ数で確保する。
+ワーカーごとに SudachiPy の辞書が複製されるため、
+1 Pod × 2 ワーカー（148 MiB）より 2 Pod × 1 ワーカー（128 MiB）の方がメモリ効率が良い
+（[ADR-0007 §6](../../adr/0007-hosting-conoha-vps.md#prosody_workers1--replicas2-とする理由)）。
 
 ---
 
@@ -253,4 +266,5 @@ flowchart LR
 - [基本設計 04: 画面設計](04-screens.md)
 - [基本設計 05: API 設計](05-api.md)
 - [ADR-0002: 言語・フレームワークの選定とサービス分割](../../adr/0002-tech-stack.md)
-- [ADR-0004: ホスティング先とインフラ構成](../../adr/0004-hosting-and-infrastructure.md)
+- [ADR-0007: ホスティング先を ConoHa VPS 単一ノードへ変更する](../../adr/0007-hosting-conoha-vps.md)
+- [ADR-0004: ホスティング先とインフラ構成](../../adr/0004-hosting-and-infrastructure.md)（ADR-0007 により置換）

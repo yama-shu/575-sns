@@ -53,9 +53,10 @@ NNNN-短い英語のタイトル.md
 | [0001](0001-onsuritsu-tolerance.md) | 字余り・字足らずの許容範囲 | 承認 | [要件定義 Q-01](../requirements/01-requirements.md#10-未決事項) |
 | [0002](0002-tech-stack.md) | 言語・フレームワークの選定とサービス分割 | 承認 | [要件定義 Q-02](../requirements/01-requirements.md#10-未決事項) |
 | [0003](0003-morphological-analyzer.md) | 形態素解析器の選定 | 承認 | [要件定義 Q-03](../requirements/01-requirements.md#10-未決事項) |
-| [0004](0004-hosting-and-infrastructure.md) | ホスティング先とインフラ構成 | 承認 | [要件定義 Q-06](../requirements/01-requirements.md#10-未決事項) |
+| [0004](0004-hosting-and-infrastructure.md) | ホスティング先とインフラ構成 | **置換**（[0007](0007-hosting-conoha-vps.md)） | [要件定義 Q-06](../requirements/01-requirements.md#10-未決事項) |
 | [0005](0005-timeline-strategy.md) | タイムラインの実現方式 | 承認 | [要件定義 Q-04](../requirements/01-requirements.md#10-未決事項) |
 | [0006](0006-authentication.md) | 認証方式 | 承認 | [要件定義 Q-05](../requirements/01-requirements.md#10-未決事項) |
+| [0007](0007-hosting-conoha-vps.md) | ホスティング先を ConoHa VPS 単一ノードへ変更する | 承認 | [要件定義 Q-06](../requirements/01-requirements.md#10-未決事項) / [ADR-0004](0004-hosting-and-infrastructure.md) |
 
 ---
 

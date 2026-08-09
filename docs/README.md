@@ -54,9 +54,10 @@ flowchart LR
 | [0001](adr/0001-onsuritsu-tolerance.md) | 字余り・字足らずの許容範囲 | 承認 |
 | [0002](adr/0002-tech-stack.md) | 言語・フレームワークの選定とサービス分割 | 承認 |
 | [0003](adr/0003-morphological-analyzer.md) | 形態素解析器の選定 | 承認 |
-| [0004](adr/0004-hosting-and-infrastructure.md) | ホスティング先とインフラ構成 | 承認 |
+| [0004](adr/0004-hosting-and-infrastructure.md) | ホスティング先とインフラ構成 | **置換**（[0007](adr/0007-hosting-conoha-vps.md)） |
 | [0005](adr/0005-timeline-strategy.md) | タイムラインの実現方式 | 承認 |
 | [0006](adr/0006-authentication.md) | 認証方式 | 承認 |
+| [0007](adr/0007-hosting-conoha-vps.md) | ホスティング先を ConoHa VPS 単一ノードへ変更する | 承認 |
 
 ## 5. 性能測定の記録
 

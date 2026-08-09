@@ -280,12 +280,12 @@ Pull Request を作ると [CI](.github/workflows/ci.yml) が自動で走りま�
 | prosody | ruff / ruff format / mypy / pytest（**C1 100% を下回ると失敗**）/ pip-audit |
 | api | gofmt / go vet / golangci-lint / go test / govulncheck |
 | web | eslint / tsc / next build / npm audit |
-| イメージのビルド | 各サービスの `runtime` を **ARM ランナー**でビルドする |
+| イメージのビルド | 各サービスの `runtime` を **x86_64 ランナー**でビルドする |
 | カバレッジの報告 | 結果を PR に1つのコメントとして投稿・更新する |
 | CI | 上記を集約する。ブランチ保護の required status check はこれを指定する |
 
-**イメージのビルドを ARM で行う理由**は、本番が OCI の ARM インスタンスで動くためです
-（[ADR-0004](docs/adr/0004-hosting-and-infrastructure.md)）。x86 でしか検証しないと、
+**イメージのビルドを x86_64 で行う理由**は、本番が ConoHa VPS の x86_64 で動くためです
+（[ADR-0007](docs/adr/0007-hosting-conoha-vps.md)）。アーキテクチャが違うランナーで検証すると、
 本番でのみ壊れる依存を見逃します。
 
 ### リリース方法
@@ -300,9 +300,9 @@ docker build -t 575-sns/api:$(git describe --tags --always)     --target runtime
 docker build -t 575-sns/web:$(git describe --tags --always)     --target runtime ./web
 ```
 
-ARM（Apple Silicon / OCI Ampere A1）と x86 の両方で動かすため、
-[ADR-0004](docs/adr/0004-hosting-and-infrastructure.md) のとおり ARM での動作を前提としています。
-x86 のマシンで ARM 向けの動作を確認する場合は `--platform linux/arm64` を付けてください。
+本番は x86_64（ConoHa VPS）で動きます（[ADR-0007](docs/adr/0007-hosting-conoha-vps.md)）。
+開発機が Apple Silicon の場合はローカルで ARM のイメージができるため、
+本番と同じものを確認したい場合は `--platform linux/amd64` を付けてください。
 
 ---
 
