@@ -228,6 +228,27 @@ curl -s -X POST localhost:8000/v1/analyze \
 # {"verdict":"hacho","reason":"TOO_FEW_MORA","total_mora":7}
 ```
 
+### 認証を試す
+
+```bash
+# 登録（セッション Cookie が返る）
+curl -s -c /tmp/cookies -X POST localhost:8080/api/v1/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d '{"handle":"yamada","email":"yamada@example.com","password":"correct-horse-battery","display_name":"やまだ"}'
+
+# 本人の情報
+curl -s -b /tmp/cookies localhost:8080/api/v1/me
+
+# ログアウト（サーバー側のセッション行を消す）
+curl -s -b /tmp/cookies -X POST localhost:8080/api/v1/auth/logout -o /dev/null -w '%{http_code}\n'
+
+# ログアウト後は 401
+curl -s -b /tmp/cookies localhost:8080/api/v1/me
+```
+
+**ログアウトは次のリクエストから即座に効きます。** サーバー側のセッションを
+消すためで、[ADR-0006](docs/adr/0006-authentication.md) が JWT を却下した理由そのものです。
+
 ### API 定義
 
 判定 API の契約は [prosody/openapi.json](prosody/openapi.json) にあります。
@@ -258,6 +279,8 @@ api（Go）と web（TypeScript）はこれを契約として型を生成する�
 | `API_DATABASE_TIMEOUT` | `3s` | DB のタイムアウト |
 | `API_PROSODY_TIMEOUT` | `1s` | prosody のタイムアウト（[基本設計 01 §6](docs/design/basic/01-architecture.md#6-サービス間通信)） |
 | `API_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
+| `API_SECURE_COOKIE` | `false` | セッション Cookie に `Secure` を付けるか。**本番では必ず `true`** |
+| `API_BCRYPT_COST` | `12` | パスワードのハッシュ化コスト。テストでは下げる |
 | `PROSODY_PORT` | `8000` | ホスト側に公開するポート |
 | `PROSODY_LOG_LEVEL` | `info` | ログレベル |
 | `PROSODY_SUDACHI_DICT` | `core` | 使用する SudachiDict（[ADR-0003](docs/adr/0003-morphological-analyzer.md)） |
@@ -287,8 +310,8 @@ docker compose -f compose.yaml build prosody  # 特定のサービスだけ
 # prosody — pytest（カバレッジは pyproject.toml の設定で常時計測される）
 docker compose run --rm prosody pytest
 
-# api — go test
-docker compose run --rm api go test ./... -cover
+# api — go test（結合テストは API_DATABASE_URL があるときだけ走る）
+docker compose exec api go test ./... -cover
 
 # web — 型検査と lint
 docker compose run --rm web npm run typecheck
