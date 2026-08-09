@@ -31,7 +31,26 @@ const (
 	CodeInvalidCredentials ErrorCode = "INVALID_CREDENTIALS"
 	// CodeAccountSuspended は利用停止中（403）。
 	CodeAccountSuspended ErrorCode = "ACCOUNT_SUSPENDED"
+	// CodeProsodyUnavailable は prosody が応答しない、
+	// またはサーキットブレーカーが開放中（503）。
+	//
+	// 詳細設計 03 の「異常なエラー」。投稿のみ停止し、閲覧は継続する。
+	CodeProsodyUnavailable ErrorCode = "PROSODY_UNAVAILABLE"
+	// CodeUpstreamTimeout は下流サービスのタイムアウト（504）。
+	CodeUpstreamTimeout ErrorCode = "UPSTREAM_TIMEOUT"
 )
+
+// IsAbnormal は詳細設計 03 の「異常なエラー」かを返す。
+//
+// 利用者に起因する「正常なエラー」と分けるのは、ログレベルと通知の扱いが違うため。
+// 正常なエラーで通知が飛ぶと、通知そのものが意味を失う。
+func (c ErrorCode) IsAbnormal() bool {
+	switch c {
+	case CodeProsodyUnavailable, CodeUpstreamTimeout:
+		return true
+	}
+	return false
+}
 
 // Error は利用者に起因するエラー（詳細設計 03 の「正常なエラー」）。
 //
@@ -87,6 +106,16 @@ var (
 	ErrNotFound = &Error{
 		Code:    CodeNotFound,
 		Message: "見つかりませんでした",
+	}
+	// ErrProsodyUnavailable は判定エンジンを利用できない。
+	ErrProsodyUnavailable = &Error{
+		Code:    CodeProsodyUnavailable,
+		Message: "いま詠めません。しばらく経ってからお試しください",
+	}
+	// ErrUpstreamTimeout は判定エンジンが時間内に応答しなかった。
+	ErrUpstreamTimeout = &Error{
+		Code:    CodeUpstreamTimeout,
+		Message: "判定に時間がかかっています。しばらく経ってからお試しください",
 	}
 )
 
