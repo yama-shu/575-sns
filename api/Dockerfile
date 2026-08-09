@@ -4,7 +4,12 @@
 #   deps    : 依存モジュールだけを先に取得し、ソース変更でキャッシュが壊れないようにする
 #   dev     : 開発用。air によるホットリロードを含む（本番には含めない）
 #   build   : 本番用のバイナリをビルドする
-#   runtime : 本番用。バイナリ1つだけを置く最小構成
+#   runtime : 本番用。api と migrate の2バイナリを置く最小構成
+#
+# api と migrate を同じイメージに入れているのは、両者が同じマイグレーション定義と
+# 同じ設定を共有するためである。イメージを分けると、api とスキーマのバージョンが
+# ずれた組み合わせでデプロイできてしまう。Kubernetes では同じイメージを
+# command だけ差し替えて Job として実行する（基本設計 03 §6）。
 
 ARG GO_VERSION=1.26
 
@@ -35,11 +40,15 @@ COPY . .
 # /go/pkg/mod をキャッシュマウントで覆うと deps 層のモジュールが隠れるため、
 # ここではコンパイル結果のキャッシュだけを使う。
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
 
 # ---------- runtime（本番でも使える水準） ----------
 FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 COPY --from=build /out/api /api
+# マイグレーション SQL はバイナリに埋め込んである（internal/db の embed）ため、
+# SQL ファイルを別途コピーする必要はない。
+COPY --from=build /out/migrate /migrate
 EXPOSE 8080
 USER nonroot:nonroot
 ENTRYPOINT ["/api"]

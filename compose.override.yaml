@@ -28,6 +28,16 @@ services:
       # 判定エンジンを単体で叩いて確認・ベンチマークするために公開する（開発時のみ）
       - "${PROSODY_PORT:-8000}:8000"
 
+  migrate:
+    build:
+      target: dev
+    image: 575-api:dev
+    # dev では go run で実行する。SQL を書き換えてもイメージの再ビルドが要らない。
+    entrypoint: ["go", "run", "./cmd/migrate"]
+    volumes:
+      - ./api:/app:cached
+      - api-tmp:/app/tmp
+
   api:
     build:
       target: dev
