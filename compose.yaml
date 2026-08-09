@@ -72,6 +72,29 @@ services:
       start_period: 60s
     restart: unless-stopped
 
+  # スキーマのマイグレーションを適用してから終了する使い捨てのサービス。
+  #
+  # api に相乗りさせず独立させているのは、基本設計 03 §6 のとおり
+  # 「api の起動時に自動適用しない」ためである。本番では api が複数 Pod に
+  # スケールするため、起動時に適用すると Pod 同士でマイグレーションが競合する。
+  # Kubernetes では同じイメージを Job として実行する。ここではその構造を
+  # ローカルでも同じ形で再現している。
+  migrate:
+    build:
+      context: ./api
+      target: runtime
+    image: 575-api:runtime
+    entrypoint: ["/migrate"]
+    command: ["up"]
+    environment:
+      API_DATABASE_URL: postgres://${POSTGRES_USER:-sns575}:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/${POSTGRES_DB:-sns575}?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    # 適用が終わったら終了する。異常終了しても再実行しない
+    # （dirty state で再試行を重ねると復旧が難しくなる）。
+    restart: "no"
+
   api:
     build:
       context: ./api
@@ -91,6 +114,9 @@ services:
         condition: service_healthy
       prosody:
         condition: service_healthy
+      # スキーマが揃っていない状態で api を起動させない
+      migrate:
+        condition: service_completed_successfully
     # runtime は distroless（シェルを含まない）ため、コンテナ内での healthcheck を定義できない。
     # 状態は外から `curl localhost:8080/readyz` で確認する。
     restart: unless-stopped

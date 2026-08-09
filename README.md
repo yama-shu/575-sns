@@ -139,6 +139,47 @@ docker compose up --build
 > モードを切り替えるときは、先に `docker compose down` してください。
 > 同じホストポートを使うため、両方を同時には起動できません。
 
+### データベースのマイグレーション
+
+スキーマの変更は [api/internal/db/migrations/](api/internal/db/migrations/) の SQL ファイルで管理します。
+`docker compose up` を実行すると `migrate` サービスが先に走り、
+**未適用のマイグレーションを適用してから api が起動します**。通常は意識する必要はありません。
+
+手動で操作する場合は次のとおりです。
+
+```bash
+docker compose run --rm migrate up          # 未適用のものをすべて適用する
+docker compose run --rm migrate version     # 現在のバージョンを表示する
+docker compose run --rm migrate down        # 直近の1件を巻き戻す
+docker compose run --rm migrate down -n 3   # 直近の3件を巻き戻す
+docker compose run --rm migrate down -all   # すべて巻き戻す
+```
+
+**api の起動時には適用されません。** 本番では api が複数の Pod にスケールするため、
+起動時に適用すると Pod 同士でマイグレーションが競合します
+（[基本設計 03 §6](docs/design/basic/03-database.md#6-マイグレーション方針)）。
+`migrate` は api と同じイメージに入っており、Kubernetes では Job として実行します。
+
+#### 新しいマイグレーションを追加する
+
+```
+api/internal/db/migrations/
+  NNNNNN_短い英語の説明.up.sql     ← 適用する SQL
+  NNNNNN_短い英語の説明.down.sql   ← 巻き戻す SQL（必須）
+```
+
+連番は既存の最大値 + 1 です。**down は必ず用意してください。**
+SQL はバイナリに埋め込まれる（`embed`）ため、ファイルを配置し直す必要はありません。
+
+> 開発モードでは `go run` で実行するため、SQL を追加したらそのまま反映されます。
+> 本番相当モード（`-f compose.yaml`）では `docker compose build migrate` が必要です。
+
+#### 適用が中断された場合
+
+マイグレーションが途中で失敗すると `dirty` 状態になり、以降の適用が拒否されます。
+`migrate version` が異常終了して dirty と表示されたら、
+スキーマの実態を確認したうえで `schema_migrations` テーブルを手で修正してください。
+
 ### 公開されるポート
 
 | URL | サービス | 備考 |
