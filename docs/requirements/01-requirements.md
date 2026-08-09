@@ -419,7 +419,7 @@ flowchart TD
 | Q-03 | 形態素解析器の選定 | ✅ 決定 | [ADR-0003](../adr/0003-morphological-analyzer.md) — SudachiPy + SudachiDict-core |
 | Q-04 | タイムラインの実現方式（Pull 型 / Push 型） | ✅ 決定 | [ADR-0005](../adr/0005-timeline-strategy.md) |
 | Q-05 | 認証方式（セッション / JWT） | ✅ 決定 | [ADR-0006](../adr/0006-authentication.md) |
-| Q-06 | ホスティング先とインフラ構成 | ✅ 決定 | [ADR-0004](../adr/0004-hosting-and-infrastructure.md) |
+| Q-06 | ホスティング先とインフラ構成 | ✅ 決定 | [ADR-0007](../adr/0007-hosting-conoha-vps.md) — ConoHa VPS 2 GB + 単一ノード k3s（[ADR-0004](../adr/0004-hosting-and-infrastructure.md) を置換） |
 | Q-07 | モーラの具体的な数え方（拗音・促音・撥音・長音・数字・英字） | ✅ 決定 | [詳細設計: 判定アルゴリズム](../design/detail/01-prosody-algorithm.md) |
 | Q-08 | 区切り位置の探索方法 | ✅ 決定 | [詳細設計: 判定アルゴリズム](../design/detail/01-prosody-algorithm.md) |
 

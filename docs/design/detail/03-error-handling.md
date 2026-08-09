@@ -273,7 +273,7 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-    A["api / web / prosody"] -->|エラーイベント| G["GlitchTip<br/>（セルフホスト）"]
+    A["api / web / prosody"] -->|エラーイベント| G["Sentry<br/>（無料枠・外部）"]
     G --> F{"通知条件"}
     F -->|CRITICAL| N1["即時通知"]
     F -->|ERROR が閾値超過| N2["集約して通知"]
@@ -299,8 +299,13 @@ flowchart LR
 ### 同種のエラーの集約
 
 同じエラーが1分間に1000件発生しても、通知は1件にまとめる。
-GlitchTip はスタックトレースの類似性でエラーをグループ化するため、
+Sentry はスタックトレースの類似性でエラーをグループ化するため、
 これは既定の挙動で満たされる。
+
+なお、収集先は [ADR-0007](../../adr/0007-hosting-conoha-vps.md) で
+GlitchTip のセルフホストから Sentry の無料枠へ変更した。
+どちらも同じ SDK・同じプロトコルで動くため、**アプリケーション側の実装は変わらない**。
+DSN の向き先が変わるだけである。
 
 ---
 

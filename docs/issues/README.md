@@ -220,12 +220,13 @@ flowchart LR
 
 | 種別 | タイトル |
 | --- | --- |
-| `infra` | OCI に ARM インスタンスを確保し k3s を構築する |
-| `infra` | Kubernetes マニフェストを作成する |
+| `infra` | ConoHa VPS を 2 GB へプラン変更し、OS を棚卸しする |
+| `infra` | VPS に k3s（単一ノード）を構築する |
+| `infra` | Kubernetes マニフェストを作成する（`resources` 必須。`replicas` を決め打ちにしない） |
 | `infra` | ドメインを取得し Let's Encrypt で HTTPS 化する |
-| `infra` | CD パイプラインを構築する |
-| `infra` | 監視・エラー収集を構築する |
-| `infra` | DB のバックアップとリストア手順を整備し、実際にリストアを訓練する |
+| `infra` | CD パイプラインを構築する（GitHub Actions → GHCR → VPS が pull） |
+| `infra` | 監視（Prometheus + Grafana）を構築し、エラー収集を Sentry に繋ぐ |
+| `infra` | DB のバックアップ（pg_dump → Cloudflare R2）とリストア手順を整備し、実際にリストアを訓練する |
 
 ---
 
