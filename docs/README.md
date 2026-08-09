@@ -58,7 +58,16 @@ flowchart LR
 | [0005](adr/0005-timeline-strategy.md) | タイムラインの実現方式 | 承認 |
 | [0006](adr/0006-authentication.md) | 認証方式 | 承認 |
 
-## 5. Issue 起票ドラフト
+## 5. 性能測定の記録
+
+実測した結果を、再現できる形で残します。数値だけを残しても
+「どういう条件だったか」が分からず、後から再現できません。
+
+| ドキュメント | 内容 | 状態 |
+| --- | --- | --- |
+| [0001-prosody-benchmark.md](perf/0001-prosody-benchmark.md) | 判定エンジンの応答時間・段階内訳・メモリ。NFR-01-01 の検証 | ✅ 完了 |
+
+## 6. Issue 起票ドラフト
 
 GitHub Issues に起票する前の下書きです。運用ルールと一覧は **[issues/README.md](issues/README.md)** を参照してください。
 
