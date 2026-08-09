@@ -1,0 +1,319 @@
+{
+  "components": {
+    "schemas": {
+      "AnalyzeRequest": {
+        "description": "判定の要求。",
+        "properties": {
+          "text": {
+            "description": "判定する本文。正規化はサーバ側で行う。",
+            "examples": [
+              "今日もまた会議のための会議かな"
+            ],
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "AnalyzeRequest",
+        "type": "object"
+      },
+      "AnalyzeResponse": {
+        "description": "判定の結果。\n\n`verdict` が `hacho` / `unknown` のとき `segments` は `null` になる。\n五七五に区切れないため、区切りが定義できないためである。",
+        "properties": {
+          "normalized_text": {
+            "description": "正規化した本文。区切り位置はこの文字列上の位置であり、api はこちらを保存する。元の入力を保存すると位置がずれる。",
+            "title": "Normalized Text",
+            "type": "string"
+          },
+          "reading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "全体の読み",
+            "title": "Reading"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Reason"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "hacho / unknown のときの理由"
+          },
+          "segments": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SegmentResponse"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "上五・中七・下五",
+            "title": "Segments"
+          },
+          "total_mora": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "全体のモーラ数",
+            "title": "Total Mora"
+          },
+          "unreadable": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "unknown のとき、読みを確定できなかった語",
+            "title": "Unreadable"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/Verdict",
+            "description": "判定"
+          }
+        },
+        "required": [
+          "verdict",
+          "normalized_text"
+        ],
+        "title": "AnalyzeResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Reason": {
+        "description": "`hacho` / `unknown` のときに、なぜそう判定したかを示す。\n\n値は API のレスポンスでそのまま使う（基本設計 05）。\n利用者への案内文を出し分けるために必要で、\n「五七五になっていません」だけでは直しようがない。",
+        "enum": [
+          "TOO_FEW_MORA",
+          "TOO_MANY_MORA",
+          "NO_VALID_SPLIT",
+          "READING_UNAVAILABLE"
+        ],
+        "title": "Reason",
+        "type": "string"
+      },
+      "SegmentResponse": {
+        "description": "区切られた1つの句。",
+        "properties": {
+          "diff": {
+            "description": "mora - expected。0 なら規定どおり",
+            "title": "Diff",
+            "type": "integer"
+          },
+          "expected": {
+            "description": "期待されるモーラ数（5 / 7 / 5）",
+            "title": "Expected",
+            "type": "integer"
+          },
+          "mora": {
+            "description": "この句のモーラ数",
+            "title": "Mora",
+            "type": "integer"
+          },
+          "reading": {
+            "description": "この句の読み",
+            "title": "Reading",
+            "type": "string"
+          },
+          "text": {
+            "description": "正規化後の本文のうち、この句にあたる部分",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "reading",
+          "mora",
+          "expected",
+          "diff"
+        ],
+        "title": "SegmentResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "Verdict": {
+        "description": "判定結果。値は API のレスポンスでそのまま使う（基本設計 05）。",
+        "enum": [
+          "teikei",
+          "kyoyo",
+          "hacho",
+          "unknown"
+        ],
+        "title": "Verdict",
+        "type": "string"
+      }
+    }
+  },
+  "info": {
+    "description": "575 の五七五判定エンジン。音数律の判定のみを行い、業務ルールを持たない。",
+    "title": "prosody",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/healthz": {
+      "get": {
+        "description": "liveness probe。プロセスが生きているかだけを返す。",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Healthz Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "プロセスが生きているか",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/readyz": {
+      "get": {
+        "description": "readiness probe。**辞書のロードが完了しているか**を返す。\n\nこれを実装しないと、Pod の再起動やスケールアウトのたびに\nロード中の Pod へトラフィックが流れてタイムアウトする（基本設計 05 §4）。",
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "判定を受け付けられるか",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/v1/analyze": {
+      "post": {
+        "description": "本文を判定し、区切りと各句のモーラ数を返す。\n\n**破調でも 200 を返す。** 判定を求められて判定を返しているためである。",
+        "operationId": "analyze_v1_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyzeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyzeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "五七五かどうかを判定する",
+        "tags": [
+          "prosody"
+        ]
+      }
+    }
+  }
+}
