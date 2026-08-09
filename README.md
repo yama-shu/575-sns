@@ -249,6 +249,43 @@ curl -s -b /tmp/cookies localhost:8080/api/v1/me
 **ログアウトは次のリクエストから即座に効きます。** サーバー側のセッションを
 消すためで、[ADR-0006](docs/adr/0006-authentication.md) が JWT を却下した理由そのものです。
 
+### api 経由で判定を試す
+
+`localhost:8000` は prosody を直接呼びます。api 経由（`localhost:8080`）は
+ログインが必要で、prosody が落ちているときの振る舞いが変わります。
+
+```bash
+# ログイン済みの Cookie が必要
+curl -s -b /tmp/cookies -X POST localhost:8080/api/v1/prosody/check \
+  -H 'Content-Type: application/json' \
+  -d '{"body":"今日もまた会議のための会議かな"}' | jq -c '{verdict, total_mora}'
+# {"verdict":"teikei","total_mora":17}
+```
+
+### prosody が落ちているときの振る舞いを試す
+
+```bash
+docker compose stop prosody
+
+# 判定は 503。閲覧系は 200 のまま（縮退運転）
+curl -s -b /tmp/cookies -X POST localhost:8080/api/v1/prosody/check \
+  -H 'Content-Type: application/json' -d '{"body":"今日もまた会議のための会議かな"}'
+# {"error":{"code":"PROSODY_UNAVAILABLE","message":"いま詠めません。しばらく経ってからお試しください"}}
+curl -s -b /tmp/cookies -o /dev/null -w '%{http_code}\n' localhost:8080/api/v1/me
+# 200
+
+# 10 回失敗するとサーキットブレーカーが開き、以降は prosody を呼ばずに即座に返る
+for i in $(seq 1 10); do
+  curl -s -o /dev/null -b /tmp/cookies -X POST localhost:8080/api/v1/prosody/check \
+    -H 'Content-Type: application/json' -d '{"body":"今日もまた会議のための会議かな"}'
+done
+docker compose logs api | grep prosody_circuit_state_changed
+# {"event":"prosody_circuit_state_changed","from":"closed","to":"open"}
+
+docker compose start prosody
+# 開放から 30 秒後に半開へ移り、試行が成功すると閉じる
+```
+
 ### API 定義
 
 判定 API の契約は [prosody/openapi.json](prosody/openapi.json) にあります。
