@@ -146,6 +146,7 @@ docker compose up --build
 | http://localhost:3000 | web | |
 | http://localhost:8080/readyz | api | 依存先（db / prosody）への疎通状況を返す |
 | http://localhost:8000/readyz | prosody | **開発時のみ**公開。本番はクラスタ内部からのみ到達可能 |
+| http://localhost:8000/docs | prosody | 判定 API のドキュメント（開発時のみ） |
 | `localhost:5432` | db | **開発時のみ**公開 |
 
 疎通はコマンドラインからも確認できます。
@@ -153,6 +154,48 @@ docker compose up --build
 ```bash
 curl -s localhost:8080/readyz | jq
 # {"dependencies":{"database":true,"prosody":true},"ready":true}
+```
+
+### 判定を試す
+
+```bash
+curl -s -X POST localhost:8000/v1/analyze \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"今日もまた会議のための会議かな"}' | jq
+```
+
+```json
+{
+  "verdict": "teikei",
+  "normalized_text": "今日もまた会議のための会議かな",
+  "total_mora": 17,
+  "segments": [
+    { "text": "今日もまた",   "mora": 5, "expected": 5, "diff": 0 },
+    { "text": "会議のための", "mora": 7, "expected": 7, "diff": 0 },
+    { "text": "会議かな",     "mora": 5, "expected": 5, "diff": 0 }
+  ]
+}
+```
+
+**破調でも 200 が返ります。** 判定を求められて判定を返しているためです。
+「破調だから投稿を拒否する」のは 575 の業務ルールで、api の責務です。
+
+```bash
+curl -s -X POST localhost:8000/v1/analyze \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"今日は疲れた"}' | jq -c '{verdict, reason, total_mora}'
+# {"verdict":"hacho","reason":"TOO_FEW_MORA","total_mora":7}
+```
+
+### API 定義
+
+判定 API の契約は [prosody/openapi.json](prosody/openapi.json) にあります。
+api（Go）と web（TypeScript）はこれを契約として型を生成するため、
+**定義を変えたらコミットしてください**。CI が最新かどうかを検査します。
+
+```bash
+./scripts/openapi.sh          # 書き出す
+./scripts/openapi.sh --check  # 最新か確かめる
 ```
 
 ### 設定方法
