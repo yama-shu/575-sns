@@ -13,8 +13,10 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1477,5 +1479,256 @@ func TestTimelineQueryUsesIndex(t *testing.T) {
 				t.Errorf("並べ替えが発生している:\n%s", plan)
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// いいね
+// ---------------------------------------------------------------------------
+
+// likeCountOf は posts.like_count を読む。
+func likeCountOf(t *testing.T, pool *pgxpool.Pool, postID int64) int {
+	t.Helper()
+	var count int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT like_count FROM posts WHERE id = $1`, postID).Scan(&count); err != nil {
+		t.Fatalf("いいね数を取得できない: %v", err)
+	}
+	return count
+}
+
+// assertLikeCountMatches は like_count と likes の実数が一致することを確かめる。
+//
+// 非正規化した値がずれていないことを、テストのたびに固定する
+// （基本設計 03 §4 が代償として挙げた「ずれ」の検出）。
+func assertLikeCountMatches(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	rows, err := pool.Query(context.Background(), `
+		SELECT p.id, p.like_count, count(l.*)
+		FROM posts p LEFT JOIN likes l ON l.post_id = p.id
+		GROUP BY p.id, p.like_count
+		HAVING p.like_count <> count(l.*)`)
+	if err != nil {
+		t.Fatalf("突合できない: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var stored, actual int
+		if err := rows.Scan(&id, &stored, &actual); err != nil {
+			t.Fatalf("読み取れない: %v", err)
+		}
+		t.Errorf("投稿 %d の like_count が %d、実数が %d でずれている", id, stored, actual)
+	}
+}
+
+func TestLikeRepository(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	likes := postgres.NewLikeRepository(pool)
+	ctx := context.Background()
+
+	author, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	liker, err := users.Create(ctx, newUser("liker"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	post, err := posts.Create(ctx, newPost(author.ID))
+	if err != nil {
+		t.Fatalf("投稿できない: %v", err)
+	}
+
+	t.Run("いいねで件数が1増える", func(t *testing.T) {
+		count, err := likes.Like(ctx, post.ID, liker.ID)
+		if err != nil {
+			t.Fatalf("いいねできない: %v", err)
+		}
+		if count != 1 || likeCountOf(t, pool, post.ID) != 1 {
+			t.Errorf("件数が違う: 戻り値=%d DB=%d", count, likeCountOf(t, pool, post.ID))
+		}
+	})
+
+	t.Run("二重いいねで件数が増えない", func(t *testing.T) {
+		// ON CONFLICT DO NOTHING の影響行数で分岐している。
+		// 分岐しないと、連打するだけで件数が増える。
+		for range 3 {
+			count, err := likes.Like(ctx, post.ID, liker.ID)
+			if err != nil {
+				t.Fatalf("いいねできない: %v", err)
+			}
+			if count != 1 {
+				t.Fatalf("件数が増えている: %d", count)
+			}
+		}
+	})
+
+	t.Run("取り消しで件数が1減る", func(t *testing.T) {
+		count, err := likes.Unlike(ctx, post.ID, liker.ID)
+		if err != nil {
+			t.Fatalf("取り消せない: %v", err)
+		}
+		if count != 0 || likeCountOf(t, pool, post.ID) != 0 {
+			t.Errorf("件数が違う: %d", count)
+		}
+	})
+
+	t.Run("いいねしていない取り消しで件数が減らない", func(t *testing.T) {
+		for range 3 {
+			count, err := likes.Unlike(ctx, post.ID, liker.ID)
+			if err != nil {
+				t.Fatalf("取り消せない: %v", err)
+			}
+			if count != 0 {
+				t.Fatalf("件数が負に振れた: %d", count)
+			}
+		}
+	})
+
+	assertLikeCountMatches(t, pool)
+}
+
+// **同時にいいねしても件数が失われないこと。**
+//
+// read-modify-write で実装すると、同時に2人がいいねしたときに片方が消える
+// （基本設計 03 §4）。実装を読んで正しそうに見えても、
+// 同時実行の失敗は目視では見つからない。
+func TestLikeRepositoryIsAtomicUnderConcurrency(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	likes := postgres.NewLikeRepository(pool)
+	ctx := context.Background()
+
+	author, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	post, err := posts.Create(ctx, newPost(author.ID))
+	if err != nil {
+		t.Fatalf("投稿できない: %v", err)
+	}
+
+	const likers = 50
+	ids := make([]int64, 0, likers)
+	for i := range likers {
+		u, err := users.Create(ctx, newUser(fmt.Sprintf("liker%d", i)))
+		if err != nil {
+			t.Fatalf("登録できない: %v", err)
+		}
+		ids = append(ids, u.ID)
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, likers)
+	for _, id := range ids {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := likes.Like(ctx, post.ID, id); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("同時いいねで失敗した: %v", err)
+	}
+
+	if got := likeCountOf(t, pool, post.ID); got != likers {
+		t.Errorf("いいねが失われている: like_count=%d, want %d", got, likers)
+	}
+	assertLikeCountMatches(t, pool)
+
+	t.Run("同時に取り消しても失われない", func(t *testing.T) {
+		var wg sync.WaitGroup
+		for _, id := range ids {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, _ = likes.Unlike(ctx, post.ID, id)
+			}()
+		}
+		wg.Wait()
+
+		if got := likeCountOf(t, pool, post.ID); got != 0 {
+			t.Errorf("件数が 0 にならない: %d", got)
+		}
+		assertLikeCountMatches(t, pool)
+	})
+}
+
+// 同じ利用者が同時に連打しても件数が1を超えないこと。
+func TestLikeRepositoryIgnoresDuplicateUnderConcurrency(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	likes := postgres.NewLikeRepository(pool)
+	ctx := context.Background()
+
+	author, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	liker, err := users.Create(ctx, newUser("liker"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	post, err := posts.Create(ctx, newPost(author.ID))
+	if err != nil {
+		t.Fatalf("投稿できない: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = likes.Like(ctx, post.ID, liker.ID)
+		}()
+	}
+	wg.Wait()
+
+	if got := likeCountOf(t, pool, post.ID); got != 1 {
+		t.Errorf("連打で件数が増えた: %d", got)
+	}
+	assertLikeCountMatches(t, pool)
+}
+
+// like_count が負にならないこと（DB の CHECK 制約）。
+func TestPostsRejectNegativeLikeCount(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	ctx := context.Background()
+
+	author, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	post, err := posts.Create(ctx, newPost(author.ID))
+	if err != nil {
+		t.Fatalf("投稿できない: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx,
+		`UPDATE posts SET like_count = like_count - 1 WHERE id = $1`, post.ID); err == nil {
+		t.Error("いいね数が負になった")
 	}
 }
