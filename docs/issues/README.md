@@ -199,6 +199,7 @@ flowchart LR
 | [0014](0014-feat-follow.md) | `feat` | フォロー・アンフォローを実装する | [#34](https://github.com/yama-shu/575-sns/issues/34) |
 | [0015](0015-feat-report-and-block.md) | `feat` | 通報・ブロックを実装する | [#36](https://github.com/yama-shu/575-sns/issues/36) |
 | [0016](0016-feat-timeline.md) | `feat` | タイムライン取得（全体 / フォロー中）を実装する | [#38](https://github.com/yama-shu/575-sns/issues/38) |
+| [0017](0017-perf-timeline-explain.md) | `perf` | タイムラインの実行計画を確認しインデックスの効果を検証する | [#40](https://github.com/yama-shu/575-sns/issues/40) |
 
 ### M5 公開（起票済みのもの）
 
@@ -242,7 +243,7 @@ flowchart LR
 | 1 | `feat` | フォロー・アンフォローを実装する（[0014](0014-feat-follow.md) / [#34](https://github.com/yama-shu/575-sns/issues/34)） | — |
 | 2 | `feat` | 通報・ブロックを実装する（[0015](0015-feat-report-and-block.md) / [#36](https://github.com/yama-shu/575-sns/issues/36)） | 1（BR-08 の双方向解除） |
 | 3 | `feat` | タイムライン取得（全体 / フォロー中）を実装する（[0016](0016-feat-timeline.md) / [#38](https://github.com/yama-shu/575-sns/issues/38)） | 1, 2 |
-| 4 | `perf` | タイムラインの実行計画を確認しインデックスの効果を検証する | 3 |
+| 4 | `perf` | タイムラインの実行計画を確認しインデックスの効果を検証する（[0017](0017-perf-timeline-explain.md) / [#40](https://github.com/yama-shu/575-sns/issues/40)） | 3 |
 | 5 | `feat` | いいねを実装する（アトミックな件数更新） | — |
 
 > **実行計画の Issue で `blocks` の除外も確認する。** [#38](https://github.com/yama-shu/575-sns/issues/38)
