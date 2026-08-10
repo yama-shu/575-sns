@@ -38,6 +38,12 @@ const (
 	// **自分がブロックしている場合にだけ使う。** 相手が自分をブロックしている
 	// 場合にこれを返すと、ブロックされた事実が漏れる（BR-10）。
 	CodeBlockedUser ErrorCode = "BLOCKED_USER"
+	// CodeCannotBlockSelf は自分自身をブロックしようとした（422）。
+	CodeCannotBlockSelf ErrorCode = "CANNOT_BLOCK_SELF"
+	// CodeCannotReportSelf は自分の投稿を通報しようとした（422）。
+	CodeCannotReportSelf ErrorCode = "CANNOT_REPORT_SELF"
+	// CodeAlreadyReported は同一投稿への重複通報（409）。
+	CodeAlreadyReported ErrorCode = "ALREADY_REPORTED"
 	// CodeProsodyHacho は判定が破調（422）。
 	//
 	// 形式は正しく、内容が業務ルールを満たさない。400 にすると
@@ -151,6 +157,21 @@ var (
 	ErrBlockedUser = &Error{
 		Code:    CodeBlockedUser,
 		Message: "この相手には行えません",
+	}
+	// ErrCannotBlockSelf は自分自身をブロックしようとした（BR-06）。
+	ErrCannotBlockSelf = &Error{
+		Code:    CodeCannotBlockSelf,
+		Message: "自分はブロックできません",
+	}
+	// ErrCannotReportSelf は自分の投稿を通報しようとした（BR-07）。
+	ErrCannotReportSelf = &Error{
+		Code:    CodeCannotReportSelf,
+		Message: "自分の投稿は通報できません",
+	}
+	// ErrAlreadyReported は同一投稿への重複通報。
+	ErrAlreadyReported = &Error{
+		Code:    CodeAlreadyReported,
+		Message: "すでに通報済みです",
 	}
 	// ErrProsodyHacho は判定が破調で投稿できない。
 	ErrProsodyHacho = &Error{
