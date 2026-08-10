@@ -1400,7 +1400,10 @@ func TestTimelineRepositoryLikedByMe(t *testing.T) {
 // 「インデックスを使えないクエリ」と「使う必要がないほど小さいテーブル」を
 // 区別できない。
 //
-// 規模を伴う測定（10万行・実測時間）は perf の Issue で行う。
+// **実物のクエリを検査する。** テストにクエリを書き写すと、実装を変えたときに
+// 古いクエリを検査し続ける（#41 で実際に起きた）。
+//
+// 規模を伴う測定（10万行・実測時間）は docs/perf/0002 で行う。
 // ここで固定するのは**クエリの形がインデックスを使える形であること**である。
 func TestTimelineQueryUsesIndex(t *testing.T) {
 	pool := newPool(t)
@@ -1409,52 +1412,58 @@ func TestTimelineQueryUsesIndex(t *testing.T) {
 
 	ctx := context.Background()
 	users := postgres.NewUserRepository(pool)
-	alice, err := users.Create(ctx, newUser("alice"))
+
+	// フォロー先を複数用意する。1人だけだと LATERAL が展開され、
+	// 実運用とは違う計画になる。
+	authors := make([]int64, 0, 20)
+	for i := range 20 {
+		u, err := users.Create(ctx, newUser(fmt.Sprintf("author%d", i)))
+		if err != nil {
+			t.Fatalf("登録できない: %v", err)
+		}
+		authors = append(authors, u.ID)
+	}
+	me, err := users.Create(ctx, newUser("me"))
 	if err != nil {
 		t.Fatalf("登録できない: %v", err)
 	}
 
 	// プランナがインデックスを選ぶだけの行数を入れる。
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO posts (author_id, body, reading, verdict,
-		                   break1, break2, mora_kami, mora_naka, mora_shimo,
-		                   visibility, status)
-		SELECT $1, '今日もまた会議のための会議かな', 'キョウモマタカイギノタメノカイギカナ',
-		       'teikei', 5, 11, 5, 7, 5, 'public', 'published'
-		FROM generate_series(1, 3000)`, alice.ID); err != nil {
-		t.Fatalf("投稿を投入できない: %v", err)
+	for _, id := range authors {
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO posts (author_id, body, reading, verdict,
+			                   break1, break2, mora_kami, mora_naka, mora_shimo,
+			                   visibility, status)
+			SELECT $1, '今日もまた会議のための会議かな', 'キョウモマタカイギノタメノカイギカナ',
+			       'teikei', 5, 11, 5, 7, 5, 'public', 'published'
+			FROM generate_series(1, 500)`, id); err != nil {
+			t.Fatalf("投稿を投入できない: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2)`,
+			me.ID, id); err != nil {
+			t.Fatalf("フォローできない: %v", err)
+		}
 	}
-	if _, err := pool.Exec(ctx, `ANALYZE posts`); err != nil {
+	if _, err := pool.Exec(ctx, `VACUUM ANALYZE posts, follows, users, likes, blocks`); err != nil {
 		t.Fatalf("統計を更新できない: %v", err)
 	}
 
-	// **特定のインデックス名を求めない。** 述語が全行に当てはまる状況では、
-	// プランナが主キーの逆順スキャンを選ぶこともある。どちらでも
-	// 「並べ替えずに上位 20 件を取れている」ことに変わりはない。
-	// ここで落としたいのは Seq Scan と全件ソートである。
-	tests := map[string]string{
-		"全体タイムライン": `
-			SELECT p.id FROM posts p
-			JOIN users u ON u.id = p.author_id
-			WHERE p.status = 'published' AND p.visibility = 'public'
-			  AND (0::bigint = 0 OR p.id < 0)
-			ORDER BY p.id DESC LIMIT 20`,
-		"フォロー中タイムライン": `
-			SELECT p.id FROM posts p
-			JOIN users u ON u.id = p.author_id
-			JOIN follows f ON f.followee_id = p.author_id AND f.follower_id = $1
-			WHERE p.status = 'published'
-			  AND (0::bigint = 0 OR p.id < 0)
-			ORDER BY p.id DESC LIMIT 20`,
+	limit := 20
+	tests := map[string]struct {
+		query     string
+		wantIndex string
+	}{
+		// 述語が全行に当てはまる状況ではプランナが主キーの逆順スキャンを
+		// 選ぶこともあるため、全体タイムラインはインデックス名を求めない。
+		"全体タイムライン": {postgres.PublicTimelineQueryForTest, ""},
+		// フォロー中はフォロー先ごとに辿るため、#7 が使われるはずである。
+		"フォロー中タイムライン": {postgres.HomeTimelineQueryForTest, "posts_author_timeline_idx"},
 	}
 
-	for name, query := range tests {
+	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			args := []any{}
-			if strings.Contains(query, "$1") {
-				args = append(args, alice.ID)
-			}
-			rows, err := pool.Query(ctx, "EXPLAIN "+query, args...)
+			rows, err := pool.Query(ctx, "EXPLAIN "+tt.query, me.ID, int64(0), limit)
 			if err != nil {
 				t.Fatalf("実行計画を取得できない: %v", err)
 			}
@@ -1473,10 +1482,8 @@ func TestTimelineQueryUsesIndex(t *testing.T) {
 			if strings.Contains(plan, "Seq Scan on posts") {
 				t.Errorf("posts に Seq Scan が出ている:\n%s", plan)
 			}
-			// 全件を並べ替えてから 20 件取る計画になっていないこと。
-			// インデックスの順序をそのまま辿れていれば Sort は現れない。
-			if strings.Contains(plan, "Sort Key: p.id") {
-				t.Errorf("並べ替えが発生している:\n%s", plan)
+			if tt.wantIndex != "" && !strings.Contains(plan, tt.wantIndex) {
+				t.Errorf("%s が使われていない:\n%s", tt.wantIndex, plan)
 			}
 		})
 	}
@@ -1730,5 +1737,259 @@ func TestPostsRejectNegativeLikeCount(t *testing.T) {
 	if _, err := pool.Exec(ctx,
 		`UPDATE posts SET like_count = like_count - 1 WHERE id = $1`, post.ID); err == nil {
 		t.Error("いいね数が負になった")
+	}
+}
+
+// LATERAL 版が素朴な JOIN 版と同じ結果を返すこと（#41）。
+//
+// **基準となるクエリをテスト側に置く。** 実装の写しではなく、
+// 「フォロー先の投稿を id 降順に並べて上から取る」という定義そのものを書く。
+// 実装がどんな計画を選んでも、結果はこれと一致しなければならない。
+const referenceHomeTimeline = `
+	SELECT p.id
+	FROM posts p
+	JOIN follows f ON f.followee_id = p.author_id AND f.follower_id = $1
+	WHERE p.status = 'published'
+	  AND ($2::bigint = 0 OR p.id < $2)
+	  AND NOT EXISTS (
+	        SELECT 1 FROM blocks b
+	        WHERE (b.blocker_id = $1 AND b.blocked_id = p.author_id)
+	           OR (b.blocker_id = p.author_id AND b.blocked_id = $1))
+	ORDER BY p.id DESC
+	LIMIT $3`
+
+func referenceIDs(t *testing.T, pool *pgxpool.Pool, viewerID, cursor int64, limit int) []int64 {
+	t.Helper()
+	rows, err := pool.Query(context.Background(), referenceHomeTimeline, viewerID, cursor, limit)
+	if err != nil {
+		t.Fatalf("基準クエリを実行できない: %v", err)
+	}
+	defer rows.Close()
+	ids := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("読み取れない: %v", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func TestHomeTimelineMatchesReference(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	blocks := postgres.NewBlockRepository(pool)
+	timelines := postgres.NewTimelineRepository(pool)
+
+	me, err := users.Create(ctx, newUser("me"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	// 投稿数を偏らせる。
+	//
+	// **1人が limit を超える連続投稿を持つ状況を作る。** これが LATERAL の
+	// 取りこぼしが起きうる唯一の形であり、ここが一致すれば定義どおりである。
+	counts := []int{40, 3, 25, 1, 12}
+	followees := make([]int64, 0, len(counts))
+	for i, n := range counts {
+		u, err := users.Create(ctx, newUser(fmt.Sprintf("followee%d", i)))
+		if err != nil {
+			t.Fatalf("登録できない: %v", err)
+		}
+		followees = append(followees, u.ID)
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2)`, me.ID, u.ID); err != nil {
+			t.Fatalf("フォローできない: %v", err)
+		}
+		for range n {
+			seedPost(t, posts, u.ID, domain.VisibilityPublic)
+		}
+	}
+
+	// フォローしていない利用者と、ブロックした相手も混ぜる。
+	stranger, err := users.Create(ctx, newUser("stranger"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	for range 30 {
+		seedPost(t, posts, stranger.ID, domain.VisibilityPublic)
+	}
+	blockedFollowee := followees[2]
+	if err := blocks.Block(ctx, me.ID, blockedFollowee); err != nil {
+		t.Fatalf("ブロックできない: %v", err)
+	}
+	// ブロックでフォローが消えるため（BR-08）、比較対象から外れることも確かめる。
+
+	for _, limit := range []int{5, 20, 50} {
+		t.Run(fmt.Sprintf("limit=%d", limit), func(t *testing.T) {
+			cursor := int64(0)
+			for page := 1; page <= 5; page++ {
+				want := referenceIDs(t, pool, me.ID, cursor, limit)
+				items, err := timelines.Home(ctx, domain.TimelineQuery{
+					ViewerID: &me.ID, Cursor: cursor, Limit: &limit,
+				})
+				if err != nil {
+					t.Fatalf("取得できない: %v", err)
+				}
+				got := timelineIDs(items)
+
+				if len(got) != len(want) {
+					t.Fatalf("%dページ目の件数が違う: %d, want %d", page, len(got), len(want))
+				}
+				for i := range want {
+					if got[i] != want[i] {
+						t.Fatalf("%dページ目の %d 件目が違う: %d, want %d\n got=%v\nwant=%v",
+							page, i+1, got[i], want[i], got, want)
+					}
+				}
+				if len(got) == 0 {
+					break
+				}
+				cursor = got[len(got)-1]
+			}
+		})
+	}
+}
+
+// カーソルで全件を重複・欠落なくたどれること（LATERAL 版）。
+func TestHomeTimelineCursorCoversAllPosts(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	timelines := postgres.NewTimelineRepository(pool)
+
+	me, err := users.Create(ctx, newUser("me"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	created := map[int64]bool{}
+	for i, n := range []int{17, 4, 23} {
+		u, err := users.Create(ctx, newUser(fmt.Sprintf("f%d", i)))
+		if err != nil {
+			t.Fatalf("登録できない: %v", err)
+		}
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2)`, me.ID, u.ID); err != nil {
+			t.Fatalf("フォローできない: %v", err)
+		}
+		for range n {
+			created[seedPost(t, posts, u.ID, domain.VisibilityPublic)] = true
+		}
+	}
+
+	limit := 7
+	seen := map[int64]bool{}
+	cursor := int64(0)
+	var previous int64
+	for range 20 {
+		items, err := timelines.Home(ctx, domain.TimelineQuery{
+			ViewerID: &me.ID, Cursor: cursor, Limit: &limit,
+		})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		if len(items) == 0 {
+			break
+		}
+		for _, id := range timelineIDs(items) {
+			if seen[id] {
+				t.Errorf("重複している: %d", id)
+			}
+			if previous != 0 && id >= previous {
+				t.Errorf("降順になっていない: %d のあとに %d", previous, id)
+			}
+			seen[id] = true
+			previous = id
+		}
+		cursor = previous
+	}
+
+	if len(seen) != len(created) {
+		t.Errorf("取得できた件数が違う: %d, want %d", len(seen), len(created))
+	}
+	for id := range created {
+		if !seen[id] {
+			t.Errorf("欠落している: %d", id)
+		}
+	}
+}
+
+// ブロックの除外を1回にまとめても、双方向に効くこと（#41）。
+//
+// 「自分がブロックした相手」と「自分をブロックした相手」を
+// 1つの集合にまとめている。まとめ方を誤ると片方向しか効かなくなる。
+func TestHomeTimelineExcludesBlockedFolloweesBothWays(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	timelines := postgres.NewTimelineRepository(pool)
+
+	me, err := users.Create(ctx, newUser("me"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	iBlock, err := users.Create(ctx, newUser("iblock"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	blocksMe, err := users.Create(ctx, newUser("blocksme"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	normal, err := users.Create(ctx, newUser("normal"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	hidden := []int64{}
+	for _, u := range []int64{iBlock.ID, blocksMe.ID} {
+		hidden = append(hidden, seedPost(t, posts, u, domain.VisibilityPublic))
+	}
+	visible := seedPost(t, posts, normal.ID, domain.VisibilityPublic)
+
+	for _, u := range []int64{iBlock.ID, blocksMe.ID, normal.ID} {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2)`, me.ID, u); err != nil {
+			t.Fatalf("フォローできない: %v", err)
+		}
+	}
+	// ブロックは follows を消すため（BR-08）、フォローの後に直接入れる。
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2), ($3, $1)`,
+		me.ID, iBlock.ID, blocksMe.ID); err != nil {
+		t.Fatalf("ブロックを作れない: %v", err)
+	}
+
+	items, err := timelines.Home(ctx, domain.TimelineQuery{ViewerID: &me.ID})
+	if err != nil {
+		t.Fatalf("取得できない: %v", err)
+	}
+	got := map[int64]bool{}
+	for _, id := range timelineIDs(items) {
+		got[id] = true
+	}
+
+	for _, id := range hidden {
+		if got[id] {
+			t.Errorf("ブロック関係の投稿が含まれている: %d", id)
+		}
+	}
+	if !got[visible] {
+		t.Errorf("ブロックしていない相手の投稿が消えている: %d", visible)
 	}
 }
