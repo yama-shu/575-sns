@@ -37,6 +37,8 @@ var statusOf = map[domain.ErrorCode]int{
 	domain.CodeNotFound:              http.StatusNotFound,
 	domain.CodeHandleTaken:           http.StatusConflict,
 	domain.CodeEmailTaken:            http.StatusConflict,
+	domain.CodeCannotFollowSelf:      http.StatusUnprocessableEntity,
+	domain.CodeBlockedUser:           http.StatusUnprocessableEntity,
 	domain.CodeProsodyHacho:          http.StatusUnprocessableEntity,
 	domain.CodeProsodyUnknownReading: http.StatusUnprocessableEntity,
 	// 異常なエラー（詳細設計 03 §2）。
