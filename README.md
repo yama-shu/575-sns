@@ -447,7 +447,30 @@ docker compose start prosody
 
 ### API 定義
 
-判定 API の契約は [prosody/openapi.json](prosody/openapi.json) にあります。
+3サービスは言語が違い、型定義を共有できません（[ADR-0002](docs/adr/0002-tech-stack.md)）。
+その代わりに **API の契約を OpenAPI 定義として管理**しています
+（[基本設計 05 §6](docs/design/basic/05-api.md#6-openapi-定義)）。
+
+| 定義 | 対象 | 作り方 |
+| --- | --- | --- |
+| [api/openapi.yaml](api/openapi.yaml) | api の外部 API | **手で書く**（Go に生成元が無いため） |
+| [prosody/openapi.json](prosody/openapi.json) | prosody の内部 API | FastAPI が型ヒントから生成する |
+| [web/src/lib/api/schema.d.ts](web/src/lib/api/schema.d.ts) | web の型 | api の定義から生成する |
+
+定義を変えたら次を実行し、生成物をコミットします。
+
+```bash
+./scripts/openapi.sh          # 書き出し・検証・型生成
+./scripts/openapi.sh --check  # 最新かどうかを確かめる（CI と同じ）
+```
+
+**手で書いた定義は、書いた時点から実装とずれ始めます。** prosody は生成物なのでずれませんが、
+api にはその保証がありません。そのため
+[api/internal/handler/openapi_test.go](api/internal/handler/openapi_test.go) で
+**実際の応答が定義に適合すること**を検査しています。
+
+応答のスキーマには `additionalProperties: false` を付けてあります。
+実装に項目を足して定義に書き忘れると、テストが落ちます。
 api（Go）と web（TypeScript）はこれを契約として型を生成するため、
 **定義を変えたらコミットしてください**。CI が最新かどうかを検査します。
 
