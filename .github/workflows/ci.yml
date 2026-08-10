@@ -65,6 +65,8 @@ jobs:
             web:
               - *shared
               - 'web/**'
+              # 定義が変われば web の型も変わる。web の検査を走らせる。
+              - 'api/openapi.yaml'
 
       - name: イメージビルド対象の一覧をつくる
         id: matrix
@@ -202,6 +204,17 @@ jobs:
       - name: カバレッジを集計する
         run: go tool cover -func=coverage.out | tail -1
 
+      # 手で書いた定義であり、生成元が無い。妥当性の検査が唯一の機械的な歯止めになる。
+      # 定義とサーバーの応答が一致するかは、単体テストの適合検査で確かめている。
+      #
+      # ランナーに入っている node に頼らず、使う版を明示する。
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: OpenAPI 定義を検証する
+        run: npx --yes @redocly/cli@1.34.1 lint openapi.yaml
+
       - name: 依存の脆弱性検査
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
 
@@ -240,6 +253,14 @@ jobs:
 
       - name: 型検査
         run: npm run typecheck
+
+      # api の定義から生成した型が古いと、web は存在しない項目を参照できてしまう。
+      # 実行時ではなくここで気づけるようにする（基本設計 05 §6）。
+      - name: OpenAPI から生成した型が最新であることを確認する
+        run: |
+          npx --yes openapi-typescript@7.9.1 ../api/openapi.yaml > /tmp/schema.d.ts
+          diff -u src/lib/api/schema.d.ts /tmp/schema.d.ts \
+            || { echo '::error::src/lib/api/schema.d.ts が最新ではありません。./scripts/openapi.sh を実行してください。'; exit 1; }
 
       - name: ビルド
         run: npm run build
