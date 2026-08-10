@@ -50,6 +50,10 @@ func newPool(t *testing.T) *pgxpool.Pool {
 func cleanup(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	ctx := context.Background()
+	// reports は posts を参照し、どちらも連鎖削除されない。先に消す。
+	if _, err := pool.Exec(ctx, `DELETE FROM reports`); err != nil {
+		t.Fatalf("後始末に失敗した: %v", err)
+	}
 	if _, err := pool.Exec(ctx, `DELETE FROM posts`); err != nil {
 		t.Fatalf("後始末に失敗した: %v", err)
 	}
@@ -757,5 +761,324 @@ func TestFollowRepositoryIsBlocked(t *testing.T) {
 	// 取り違えると、ブロックされた側の操作を誤って許してしまう。
 	if got, err := follows.IsBlocked(ctx, blocked.ID, blocker.ID); err != nil || got {
 		t.Errorf("向きが逆のブロックを拾っている: %v %v", got, err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 通報・ブロック
+// ---------------------------------------------------------------------------
+
+// BR-08: ブロックするとフォロー関係が双方向に解除される。
+//
+// **1トランザクションで行われること**を確かめる。分けて実行すると
+// 「ブロックはできたがフォローが残る」状態が生じ、ブロックしたのに
+// 相手のタイムラインへ自分の投稿が流れ続ける。
+func TestBlockRepositoryRemovesFollowsBothWays(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	follows := postgres.NewFollowRepository(pool)
+	blocks := postgres.NewBlockRepository(pool)
+	ctx := context.Background()
+
+	alice, err := users.Create(ctx, newUser("alice"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	bob, err := users.Create(ctx, newUser("bob"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	// 相互フォローの状態を作る。
+	if err := follows.Follow(ctx, alice.ID, bob.ID); err != nil {
+		t.Fatalf("フォローできない: %v", err)
+	}
+	if err := follows.Follow(ctx, bob.ID, alice.ID); err != nil {
+		t.Fatalf("フォローできない: %v", err)
+	}
+
+	if err := blocks.Block(ctx, alice.ID, bob.ID); err != nil {
+		t.Fatalf("ブロックできない: %v", err)
+	}
+
+	for _, c := range []struct {
+		name     string
+		from, to int64
+	}{
+		{"ブロックした側 → された側", alice.ID, bob.ID},
+		{"された側 → ブロックした側", bob.ID, alice.ID},
+	} {
+		following, err := follows.IsFollowing(ctx, c.from, c.to)
+		if err != nil {
+			t.Fatalf("確認できない: %v", err)
+		}
+		if following {
+			t.Errorf("%s のフォローが残っている", c.name)
+		}
+	}
+
+	blocked, err := blocks.IsBlocked(ctx, alice.ID, bob.ID)
+	if err != nil || !blocked {
+		t.Errorf("ブロックが作られていない: %v %v", blocked, err)
+	}
+}
+
+func TestBlockRepositoryIsIdempotent(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	blocks := postgres.NewBlockRepository(pool)
+	ctx := context.Background()
+
+	alice, err := users.Create(ctx, newUser("alice"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	bob, err := users.Create(ctx, newUser("bob"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	// ON CONFLICT DO NOTHING で冪等にしている。
+	for range 3 {
+		if err := blocks.Block(ctx, alice.ID, bob.ID); err != nil {
+			t.Fatalf("2回目以降のブロックで失敗した: %v", err)
+		}
+	}
+	// 解除も冪等。
+	for range 2 {
+		if err := blocks.Unblock(ctx, alice.ID, bob.ID); err != nil {
+			t.Fatalf("2回目の解除で失敗した: %v", err)
+		}
+	}
+	blocked, err := blocks.IsBlocked(ctx, alice.ID, bob.ID)
+	if err != nil || blocked {
+		t.Errorf("ブロックが残っている: %v %v", blocked, err)
+	}
+}
+
+// 解除でフォロー関係は復活しない。
+func TestBlockRepositoryUnblockDoesNotRestoreFollows(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	follows := postgres.NewFollowRepository(pool)
+	blocks := postgres.NewBlockRepository(pool)
+	ctx := context.Background()
+
+	alice, err := users.Create(ctx, newUser("alice"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	bob, err := users.Create(ctx, newUser("bob"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	if err := follows.Follow(ctx, alice.ID, bob.ID); err != nil {
+		t.Fatalf("フォローできない: %v", err)
+	}
+	if err := blocks.Block(ctx, alice.ID, bob.ID); err != nil {
+		t.Fatalf("ブロックできない: %v", err)
+	}
+	if err := blocks.Unblock(ctx, alice.ID, bob.ID); err != nil {
+		t.Fatalf("解除できない: %v", err)
+	}
+
+	following, err := follows.IsFollowing(ctx, alice.ID, bob.ID)
+	if err != nil {
+		t.Fatalf("確認できない: %v", err)
+	}
+	if following {
+		t.Error("フォロー関係が復活している")
+	}
+}
+
+// BR-06: 自分自身をブロックできない（DB の CHECK 制約）。
+func TestBlockRepositoryRejectsSelfBlock(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	blocks := postgres.NewBlockRepository(pool)
+	ctx := context.Background()
+
+	user, err := users.Create(ctx, newUser("solo"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	if err := blocks.Block(ctx, user.ID, user.ID); err == nil {
+		t.Error("自分自身をブロックできてしまった")
+	}
+}
+
+// 双方向の判定が、どちらの向きのブロックも拾うこと。
+func TestBlockRepositoryIsBlockedEitherWay(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	blocks := postgres.NewBlockRepository(pool)
+	ctx := context.Background()
+
+	alice, err := users.Create(ctx, newUser("alice"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	bob, err := users.Create(ctx, newUser("bob"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	if got, err := blocks.IsBlockedEitherWay(ctx, alice.ID, bob.ID); err != nil || got {
+		t.Errorf("ブロックが無いのに true: %v %v", got, err)
+	}
+
+	if err := blocks.Block(ctx, bob.ID, alice.ID); err != nil {
+		t.Fatalf("ブロックできない: %v", err)
+	}
+	// 引数の順序を入れ替えても拾うこと。
+	for _, pair := range [][2]int64{{alice.ID, bob.ID}, {bob.ID, alice.ID}} {
+		got, err := blocks.IsBlockedEitherWay(ctx, pair[0], pair[1])
+		if err != nil || !got {
+			t.Errorf("向き %v を拾えていない: %v %v", pair, got, err)
+		}
+	}
+}
+
+func TestReportRepository(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	reports := postgres.NewReportRepository(pool)
+	ctx := context.Background()
+
+	author, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	reporter, err := users.Create(ctx, newUser("reporter"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	post, err := posts.Create(ctx, newPost(author.ID))
+	if err != nil {
+		t.Fatalf("投稿できない: %v", err)
+	}
+
+	t.Run("通報できる", func(t *testing.T) {
+		report, err := reports.Create(ctx, &domain.Report{
+			ReporterID: reporter.ID, PostID: post.ID,
+			Reason: domain.ReportSpam, Comment: "宣伝です", Status: domain.ReportPending,
+		})
+		if err != nil {
+			t.Fatalf("通報できない: %v", err)
+		}
+		if report.ID == 0 || report.Status != domain.ReportPending {
+			t.Errorf("通報の内容が違う: %+v", report)
+		}
+		if report.Comment != "宣伝です" {
+			t.Errorf("コメントが保存されない: %q", report.Comment)
+		}
+	})
+
+	t.Run("重複通報は ALREADY_REPORTED", func(t *testing.T) {
+		// 事前確認ではなく UNIQUE 制約で防いでいる。
+		_, err := reports.Create(ctx, &domain.Report{
+			ReporterID: reporter.ID, PostID: post.ID,
+			Reason: domain.ReportHarassment, Status: domain.ReportPending,
+		})
+		if !errors.Is(err, domain.ErrAlreadyReported) {
+			t.Errorf("ALREADY_REPORTED を期待したが %v", err)
+		}
+	})
+
+	t.Run("別の利用者は通報できる", func(t *testing.T) {
+		other, err := users.Create(ctx, newUser("other"))
+		if err != nil {
+			t.Fatalf("登録できない: %v", err)
+		}
+		if _, err := reports.Create(ctx, &domain.Report{
+			ReporterID: other.ID, PostID: post.ID,
+			Reason: domain.ReportSpam, Status: domain.ReportPending,
+		}); err != nil {
+			t.Errorf("別の利用者が通報できない: %v", err)
+		}
+	})
+
+	t.Run("コメント無しでも通報できる", func(t *testing.T) {
+		another, err := users.Create(ctx, newUser("another"))
+		if err != nil {
+			t.Fatalf("登録できない: %v", err)
+		}
+		report, err := reports.Create(ctx, &domain.Report{
+			ReporterID: another.ID, PostID: post.ID,
+			Reason: domain.ReportOther, Status: domain.ReportPending,
+		})
+		if err != nil {
+			t.Fatalf("通報できない: %v", err)
+		}
+		if report.Comment != "" {
+			t.Errorf("コメントが空でない: %q", report.Comment)
+		}
+	})
+}
+
+// DB の CHECK 制約が不正な通報を拒否すること。
+func TestReportRepositoryRejectsInvalidReport(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	reports := postgres.NewReportRepository(pool)
+	ctx := context.Background()
+
+	author, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	reporter, err := users.Create(ctx, newUser("reporter"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	post, err := posts.Create(ctx, newPost(author.ID))
+	if err != nil {
+		t.Fatalf("投稿できない: %v", err)
+	}
+
+	tests := map[string]*domain.Report{
+		"理由が不正": {
+			ReporterID: reporter.ID, PostID: post.ID,
+			Reason: "whatever", Status: domain.ReportPending,
+		},
+		"状態が不正": {
+			ReporterID: reporter.ID, PostID: post.ID,
+			Reason: domain.ReportSpam, Status: "done",
+		},
+		"存在しない投稿": {
+			ReporterID: reporter.ID, PostID: 999999,
+			Reason: domain.ReportSpam, Status: domain.ReportPending,
+		},
+	}
+
+	for name, report := range tests {
+		t.Run(name, func(t *testing.T) {
+			if _, err := reports.Create(ctx, report); err == nil {
+				t.Error("不正な通報が保存された")
+			}
+		})
 	}
 }
