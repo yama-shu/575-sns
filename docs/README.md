@@ -67,12 +67,13 @@ flowchart LR
 | ドキュメント | 内容 | 状態 |
 | --- | --- | --- |
 | [0001-prosody-benchmark.md](perf/0001-prosody-benchmark.md) | 判定エンジンの応答時間・段階内訳・メモリ。NFR-01-01 の検証 | ✅ 完了 |
+| [0002-timeline-explain.md](perf/0002-timeline-explain.md) | タイムラインの実行計画。カーソル方式と `OFFSET` の比較、NFR-01-02 の検証 | ✅ 完了 |
 
 ## 6. Issue 起票ドラフト
 
 GitHub Issues に起票する前の下書きです。運用ルールと一覧は **[issues/README.md](issues/README.md)** を参照してください。
 
-M0（開発基盤）と M1（判定エンジン）の9件がドラフト済みです。
+M0 から M3 までの17件がドラフト済みです。
 M2 以降はバックログとして題名のみを列挙しています。
 
 ---
