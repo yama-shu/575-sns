@@ -32,8 +32,7 @@ type createPostRequest struct {
 }
 
 type postResponse struct {
-	// ID は文字列。BIGINT を JSON の数値で返すと、
-	// JavaScript の Number（53bit）で精度が落ちる。
+	// ID は文字列。理由は formatID を参照。
 	ID         string                `json:"id"`
 	Body       string                `json:"body"`
 	Verdict    domain.Verdict        `json:"verdict"`
@@ -115,6 +114,13 @@ func (h *Post) Delete(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// formatID は ID を文字列にする。
+//
+// BIGINT を JSON の数値で返すと、JavaScript の Number（53bit）で精度が落ちる。
+func formatID(id int64) string {
+	return strconv.FormatInt(id, 10)
+}
+
 // parsePostID は経路の ID を数値に変える。
 //
 // 数値でない ID は 400 とする。404 にすると、
@@ -137,7 +143,7 @@ func toPostResponse(v *usecase.PostView) postResponse {
 	}
 
 	return postResponse{
-		ID:         strconv.FormatInt(v.Post.ID, 10),
+		ID:         formatID(v.Post.ID),
 		Body:       v.Post.Body,
 		Verdict:    v.Post.Verdict,
 		Segments:   segments,

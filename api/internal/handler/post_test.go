@@ -43,7 +43,19 @@ func (s *stubPostRepo) FindByID(context.Context, int64) (*domain.Post, *domain.U
 	return s.post, s.author, nil
 }
 
-func (s *stubPostRepo) Delete(context.Context, int64, time.Time) error          { return s.err }
+func (s *stubPostRepo) Delete(context.Context, int64, time.Time) error { return s.err }
+
+// stubBlockRepo はブロックの偽物。handler のテストでは常に「ブロック無し」。
+type stubBlockRepo struct{}
+
+func (stubBlockRepo) Block(context.Context, int64, int64) error   { return nil }
+func (stubBlockRepo) Unblock(context.Context, int64, int64) error { return nil }
+func (stubBlockRepo) IsBlocked(context.Context, int64, int64) (bool, error) {
+	return false, nil
+}
+func (stubBlockRepo) IsBlockedEitherWay(context.Context, int64, int64) (bool, error) {
+	return false, nil
+}
 func (s *stubPostRepo) IsFollowing(context.Context, int64, int64) (bool, error) { return false, nil }
 func (s *stubPostRepo) IsLikedBy(context.Context, int64, int64) (bool, error)   { return false, nil }
 
@@ -86,7 +98,7 @@ func callPost(
 		handler.SetCurrentUserForTest(c, user)
 	}
 
-	h := handler.NewPost(usecase.NewPost(repo, analyzer, nil))
+	h := handler.NewPost(usecase.NewPost(repo, analyzer, stubBlockRepo{}, nil))
 	if err := invoke(h, c); err != nil {
 		t.Fatalf("ハンドラがエラーを返した: %v", err)
 	}
