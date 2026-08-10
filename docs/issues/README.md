@@ -245,10 +245,11 @@ flowchart LR
 | 3 | `feat` | タイムライン取得（全体 / フォロー中）を実装する（[0016](0016-feat-timeline.md) / [#38](https://github.com/yama-shu/575-sns/issues/38)） | 1, 2 |
 | 4 | `perf` | タイムラインの実行計画を確認しインデックスの効果を検証する（[0017](0017-perf-timeline-explain.md) / [#40](https://github.com/yama-shu/575-sns/issues/40)） | 3 |
 | 5 | `feat` | いいねを実装する（アトミックな件数更新） | — |
+| 6 | `perf` | フォロー中タイムラインを `LATERAL` で書き換える（[#41](https://github.com/yama-shu/575-sns/issues/41)） | 4 |
 
-> **実行計画の Issue で `blocks` の除外も確認する。** [#38](https://github.com/yama-shu/575-sns/issues/38)
-> の時点では `blocks` の行数が少なく、プランナが Seq Scan を選ぶため判断できなかった。
-> 10万行規模での測定時に、双方向の除外が主キーを使えているかを確かめる。
+> **`blocks` の除外は [#40](https://github.com/yama-shu/575-sns/issues/40) で確認済み。**
+> 549 行のテーブルを1回だけ読んで保持する計画になり、追加のインデックスは不要と判断した。
+> 数万行規模になったときの計画は、その時点で再測定する。
 | — | `feat` | フォロー中一覧・フォロワー一覧・ブロック中一覧を実装する（FR-04-03） | 下記 |
 
 > **一覧はカーソルの設計が未決。** [基本設計 03 §5](../design/basic/03-database.md#5-カーソルページネーション)
