@@ -368,6 +368,28 @@ curl -s "localhost:8080/api/v1/timelines/public?limit=2&cursor=57" | jq -c '[.it
 **フォロー中タイムラインには、フォロー相手の `followers` 限定の投稿も含まれます。**
 全体タイムラインは `public` の投稿だけです。
 
+### いいねを試す
+
+```bash
+# いいねする（PUT。連打しても件数は増えない）
+curl -s -b /tmp/cookies -X PUT localhost:8080/api/v1/posts/1/like
+# {"liked":true,"like_count":1}
+
+# 取り消す
+curl -s -b /tmp/cookies -X DELETE localhost:8080/api/v1/posts/1/like
+# {"liked":false,"like_count":0}
+```
+
+`posts.like_count` は `likes` から数えれば求まる値ですが、
+タイムライン20件の表示ごとに20回の集計が走るのを避けるため非正規化しています
+（[基本設計 03 §4](docs/design/basic/03-database.md#4-いいね数の非正規化)）。
+
+**件数は DB の中で加算します**（`like_count = like_count + 1`）。
+アプリ側で読んで加算して書き戻すと、同時に2人がいいねしたときに片方が消えます。
+
+見えない投稿にはいいねできません（削除済み・ブロック中・フォロワー限定で非フォロー）。
+いずれも 404 を返します。`like_count` の増加から存在を推測されないようにするためです。
+
 ### 通報・ブロックを試す
 
 ```bash
