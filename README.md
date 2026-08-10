@@ -313,6 +313,32 @@ curl -s -b /tmp/cookies -X POST localhost:8080/api/v1/posts \
 「判定OK」という嘘を添えるだけで破調が保存できるためです
 （[基本設計 01 §4](docs/design/basic/01-architecture.md#なぜ2回判定するのか)）。
 
+### フォローを試す
+
+```bash
+# フォローする（PUT。何度実行しても結果が同じ）
+curl -s -b /tmp/cookies -X PUT localhost:8080/api/v1/users/bob/follow
+# {"following":true,"followers_count":1}
+
+# 解除する
+curl -s -b /tmp/cookies -X DELETE localhost:8080/api/v1/users/bob/follow
+# {"following":false,"followers_count":0}
+```
+
+**すでにフォロー済みでも 200 が返ります。** 「フォローされている状態にする」
+という要求は満たされているためで、通信のリトライで二重に実行されても問題が起きません。
+
+ブロックは向きによって応答が変わります。
+
+| 向き | 応答 |
+| --- | --- |
+| 自分が相手をブロックしている | 422 `BLOCKED_USER` |
+| 相手が自分をブロックしている | 404 `NOT_FOUND` |
+
+後者を 422 にすると、ブロックされた事実が分かってしまいます
+（[BR-10](docs/design/basic/02-domain-model.md#関係に関するルール)）。
+404 なら存在しない識別名・退会済みと区別がつきません。
+
 ### prosody が落ちているときの振る舞いを試す
 
 ```bash
