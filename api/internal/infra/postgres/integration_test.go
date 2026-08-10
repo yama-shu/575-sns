@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -1078,6 +1079,402 @@ func TestReportRepositoryRejectsInvalidReport(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if _, err := reports.Create(ctx, report); err == nil {
 				t.Error("不正な通報が保存された")
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// タイムライン
+// ---------------------------------------------------------------------------
+
+// timelineIDs は取得結果の投稿 ID を返す。
+func timelineIDs(items []domain.TimelineItem) []int64 {
+	ids := make([]int64, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.Post.ID)
+	}
+	return ids
+}
+
+// seedPost は指定の公開範囲で投稿を1件作る。
+func seedPost(t *testing.T, posts *postgres.PostRepository, authorID int64, v domain.Visibility) int64 {
+	t.Helper()
+	post := newPost(authorID)
+	post.Visibility = v
+	created, err := posts.Create(context.Background(), post)
+	if err != nil {
+		t.Fatalf("投稿できない: %v", err)
+	}
+	return created.ID
+}
+
+func TestTimelineRepositoryPublic(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	timelines := postgres.NewTimelineRepository(pool)
+	ctx := context.Background()
+
+	alice, err := users.Create(ctx, newUser("alice"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	first := seedPost(t, posts, alice.ID, domain.VisibilityPublic)
+	second := seedPost(t, posts, alice.ID, domain.VisibilityPublic)
+	limited := seedPost(t, posts, alice.ID, domain.VisibilityFollowers)
+	deleted := seedPost(t, posts, alice.ID, domain.VisibilityPublic)
+	if err := posts.Delete(ctx, deleted, time.Now()); err != nil {
+		t.Fatalf("削除できない: %v", err)
+	}
+
+	items, err := timelines.Public(ctx, domain.TimelineQuery{})
+	if err != nil {
+		t.Fatalf("取得できない: %v", err)
+	}
+	got := timelineIDs(items)
+
+	// 新しい順。followers 限定と削除済みは含まれない。
+	want := []int64{second, first}
+	if len(got) != len(want) {
+		t.Fatalf("件数が違う: %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("%d 件目が違う: %d, want %d", i+1, got[i], want[i])
+		}
+	}
+	for _, id := range got {
+		if id == limited || id == deleted {
+			t.Errorf("含まれてはいけない投稿がある: %d", id)
+		}
+	}
+	// 投稿者を1回のクエリで取れていること。
+	if items[0].Author.Handle != "alice" {
+		t.Errorf("投稿者が違う: %+v", items[0].Author)
+	}
+}
+
+// カーソルで重複も欠落もなく全件たどれること。
+func TestTimelineRepositoryCursorPagination(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	timelines := postgres.NewTimelineRepository(pool)
+	ctx := context.Background()
+
+	alice, err := users.Create(ctx, newUser("alice"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	created := []int64{}
+	for range 5 {
+		created = append(created, seedPost(t, posts, alice.ID, domain.VisibilityPublic))
+	}
+
+	limit := 2
+	seen := []int64{}
+	cursor := int64(0)
+	for range 5 {
+		items, err := timelines.Public(ctx, domain.TimelineQuery{Cursor: cursor, Limit: &limit})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		if len(items) == 0 {
+			break
+		}
+		seen = append(seen, timelineIDs(items)...)
+		cursor = items[len(items)-1].Post.ID
+	}
+
+	if len(seen) != len(created) {
+		t.Fatalf("件数が違う: %d, want %d", len(seen), len(created))
+	}
+	unique := map[int64]bool{}
+	for i, id := range seen {
+		if unique[id] {
+			t.Errorf("重複している: %d", id)
+		}
+		unique[id] = true
+		if i > 0 && seen[i-1] <= id {
+			t.Errorf("降順になっていない: %v", seen)
+		}
+	}
+}
+
+// BR-09: ブロック関係にある投稿が双方向で除外されること。
+func TestTimelineRepositoryExcludesBlocked(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	blocks := postgres.NewBlockRepository(pool)
+	timelines := postgres.NewTimelineRepository(pool)
+	ctx := context.Background()
+
+	alice, err := users.Create(ctx, newUser("alice"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	bob, err := users.Create(ctx, newUser("bob"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	alicePost := seedPost(t, posts, alice.ID, domain.VisibilityPublic)
+	bobPost := seedPost(t, posts, bob.ID, domain.VisibilityPublic)
+
+	if err := blocks.Block(ctx, alice.ID, bob.ID); err != nil {
+		t.Fatalf("ブロックできない: %v", err)
+	}
+
+	t.Run("ブロックした側から見えない", func(t *testing.T) {
+		items, err := timelines.Public(ctx, domain.TimelineQuery{ViewerID: &alice.ID})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		for _, id := range timelineIDs(items) {
+			if id == bobPost {
+				t.Error("ブロックした相手の投稿が含まれている")
+			}
+		}
+	})
+
+	t.Run("ブロックされた側からも見えない", func(t *testing.T) {
+		items, err := timelines.Public(ctx, domain.TimelineQuery{ViewerID: &bob.ID})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		for _, id := range timelineIDs(items) {
+			if id == alicePost {
+				t.Error("ブロックした側の投稿が含まれている")
+			}
+		}
+	})
+
+	t.Run("未ログインは影響を受けない", func(t *testing.T) {
+		items, err := timelines.Public(ctx, domain.TimelineQuery{})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		if len(timelineIDs(items)) != 2 {
+			t.Errorf("未ログインで除外されている: %v", timelineIDs(items))
+		}
+	})
+}
+
+func TestTimelineRepositoryHome(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	follows := postgres.NewFollowRepository(pool)
+	timelines := postgres.NewTimelineRepository(pool)
+	ctx := context.Background()
+
+	me, err := users.Create(ctx, newUser("me"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	followee, err := users.Create(ctx, newUser("followee"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	stranger, err := users.Create(ctx, newUser("stranger"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	followeePublic := seedPost(t, posts, followee.ID, domain.VisibilityPublic)
+	followeeLimited := seedPost(t, posts, followee.ID, domain.VisibilityFollowers)
+	strangerPost := seedPost(t, posts, stranger.ID, domain.VisibilityPublic)
+	myPost := seedPost(t, posts, me.ID, domain.VisibilityPublic)
+
+	if err := follows.Follow(ctx, me.ID, followee.ID); err != nil {
+		t.Fatalf("フォローできない: %v", err)
+	}
+
+	items, err := timelines.Home(ctx, domain.TimelineQuery{ViewerID: &me.ID})
+	if err != nil {
+		t.Fatalf("取得できない: %v", err)
+	}
+	got := map[int64]bool{}
+	for _, id := range timelineIDs(items) {
+		got[id] = true
+	}
+
+	// フォロイーの投稿は followers 限定も含めて出る。
+	if !got[followeePublic] || !got[followeeLimited] {
+		t.Errorf("フォロイーの投稿が欠けている: %v", timelineIDs(items))
+	}
+	// フォローしていない相手と自分の投稿は出ない（BR-05 で自分はフォローできない）。
+	if got[strangerPost] {
+		t.Error("フォローしていない相手の投稿が含まれている")
+	}
+	if got[myPost] {
+		t.Error("自分の投稿が含まれている")
+	}
+
+	t.Run("フォローを外すと消える", func(t *testing.T) {
+		if err := follows.Unfollow(ctx, me.ID, followee.ID); err != nil {
+			t.Fatalf("解除できない: %v", err)
+		}
+		items, err := timelines.Home(ctx, domain.TimelineQuery{ViewerID: &me.ID})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		if len(items) != 0 {
+			t.Errorf("解除後も投稿が残っている: %v", timelineIDs(items))
+		}
+	})
+}
+
+// liked_by_me が1クエリで取れていること。
+func TestTimelineRepositoryLikedByMe(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	timelines := postgres.NewTimelineRepository(pool)
+	ctx := context.Background()
+
+	alice, err := users.Create(ctx, newUser("alice"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	liked := seedPost(t, posts, alice.ID, domain.VisibilityPublic)
+	notLiked := seedPost(t, posts, alice.ID, domain.VisibilityPublic)
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO likes (user_id, post_id) VALUES ($1, $2)`, alice.ID, liked); err != nil {
+		t.Fatalf("いいねを作れない: %v", err)
+	}
+
+	items, err := timelines.Public(ctx, domain.TimelineQuery{ViewerID: &alice.ID})
+	if err != nil {
+		t.Fatalf("取得できない: %v", err)
+	}
+	for _, item := range items {
+		want := item.Post.ID == liked
+		if item.LikedByMe != want {
+			t.Errorf("投稿 %d の liked_by_me が %v", item.Post.ID, item.LikedByMe)
+		}
+	}
+	if len(items) != 2 {
+		t.Fatalf("件数が違う: %d", len(items))
+	}
+	_ = notLiked
+
+	t.Run("未ログインは常に false", func(t *testing.T) {
+		items, err := timelines.Public(ctx, domain.TimelineQuery{})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		for _, item := range items {
+			if item.LikedByMe {
+				t.Errorf("未ログインなのに liked_by_me が true: %d", item.Post.ID)
+			}
+		}
+	})
+}
+
+// 実行計画に posts の Seq Scan が出ないこと。
+//
+// **行数を増やしてから確認する。** 数行しかないテーブルでは、
+// PostgreSQL は正しくインデックスより Seq Scan を選ぶ。少量のまま検査すると、
+// 「インデックスを使えないクエリ」と「使う必要がないほど小さいテーブル」を
+// 区別できない。
+//
+// 規模を伴う測定（10万行・実測時間）は perf の Issue で行う。
+// ここで固定するのは**クエリの形がインデックスを使える形であること**である。
+func TestTimelineQueryUsesIndex(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	alice, err := users.Create(ctx, newUser("alice"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	// プランナがインデックスを選ぶだけの行数を入れる。
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO posts (author_id, body, reading, verdict,
+		                   break1, break2, mora_kami, mora_naka, mora_shimo,
+		                   visibility, status)
+		SELECT $1, '今日もまた会議のための会議かな', 'キョウモマタカイギノタメノカイギカナ',
+		       'teikei', 5, 11, 5, 7, 5, 'public', 'published'
+		FROM generate_series(1, 3000)`, alice.ID); err != nil {
+		t.Fatalf("投稿を投入できない: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `ANALYZE posts`); err != nil {
+		t.Fatalf("統計を更新できない: %v", err)
+	}
+
+	// **特定のインデックス名を求めない。** 述語が全行に当てはまる状況では、
+	// プランナが主キーの逆順スキャンを選ぶこともある。どちらでも
+	// 「並べ替えずに上位 20 件を取れている」ことに変わりはない。
+	// ここで落としたいのは Seq Scan と全件ソートである。
+	tests := map[string]string{
+		"全体タイムライン": `
+			SELECT p.id FROM posts p
+			JOIN users u ON u.id = p.author_id
+			WHERE p.status = 'published' AND p.visibility = 'public'
+			  AND (0::bigint = 0 OR p.id < 0)
+			ORDER BY p.id DESC LIMIT 20`,
+		"フォロー中タイムライン": `
+			SELECT p.id FROM posts p
+			JOIN users u ON u.id = p.author_id
+			JOIN follows f ON f.followee_id = p.author_id AND f.follower_id = $1
+			WHERE p.status = 'published'
+			  AND (0::bigint = 0 OR p.id < 0)
+			ORDER BY p.id DESC LIMIT 20`,
+	}
+
+	for name, query := range tests {
+		t.Run(name, func(t *testing.T) {
+			args := []any{}
+			if strings.Contains(query, "$1") {
+				args = append(args, alice.ID)
+			}
+			rows, err := pool.Query(ctx, "EXPLAIN "+query, args...)
+			if err != nil {
+				t.Fatalf("実行計画を取得できない: %v", err)
+			}
+			defer rows.Close()
+
+			var lines []string
+			for rows.Next() {
+				var line string
+				if err := rows.Scan(&line); err != nil {
+					t.Fatalf("読み取れない: %v", err)
+				}
+				lines = append(lines, line)
+			}
+			plan := strings.Join(lines, "\n")
+
+			if strings.Contains(plan, "Seq Scan on posts") {
+				t.Errorf("posts に Seq Scan が出ている:\n%s", plan)
+			}
+			// 全件を並べ替えてから 20 件取る計画になっていないこと。
+			// インデックスの順序をそのまま辿れていれば Sort は現れない。
+			if strings.Contains(plan, "Sort Key: p.id") {
+				t.Errorf("並べ替えが発生している:\n%s", plan)
 			}
 		})
 	}
