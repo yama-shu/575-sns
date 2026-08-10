@@ -274,7 +274,8 @@ WHERE p.status = 'published'
   AND p.id < :cursor
   AND NOT EXISTS (
         SELECT 1 FROM blocks b
-        WHERE b.blocker_id = :me AND b.blocked_id = p.author_id
+        WHERE (b.blocker_id = :me AND b.blocked_id = p.author_id)
+           OR (b.blocker_id = p.author_id AND b.blocked_id = :me)
       )
 ORDER BY p.id DESC
 LIMIT 20;
@@ -295,7 +296,8 @@ WHERE p.status = 'published'
   AND p.id < :cursor
   AND NOT EXISTS (
         SELECT 1 FROM blocks b
-        WHERE b.blocker_id = :me AND b.blocked_id = p.author_id
+        WHERE (b.blocker_id = :me AND b.blocked_id = p.author_id)
+           OR (b.blocker_id = p.author_id AND b.blocked_id = :me)
       )
 ORDER BY p.id DESC
 LIMIT 20;
@@ -303,6 +305,21 @@ LIMIT 20;
 
 - フォロー一覧の取得 → **#8**（`follower_id` で前方一致）
 - 各フォロイーの投稿 → **#7**（`author_id` + `id DESC`）
+
+#### ブロックの除外は双方向に行う（#38 で訂正）
+
+当初のクエリは `blocker_id = :me` の一方向しか除外していなかった。
+[BR-09 を双方向と定めた](02-domain-model.md#br-09-は双方向に効く)ため、
+**投稿者が閲覧者をブロックしている場合も除外する**。
+片方向のままだと、ブロックされた側のタイムラインに相手の投稿が流れ続ける。
+
+インデックス #12 は `(blocker_id, blocked_id)` の順だが、
+追加した枝も `blocker_id` を等値で絞るため、**両方の枝で主キーを使える**。
+逆順のインデックスを別途作る必要はない。
+
+ただし、プランナが実際に主キーを選ぶかは `blocks` の行数に依存する。
+数行しかない状態では Seq Scan を選ぶのが正しい判断であり、
+**規模を伴う確認は実行計画の Issue で行う**。
 
 #### 実行計画の確認を必須とする
 
