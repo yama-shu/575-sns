@@ -85,8 +85,15 @@ func run() error {
 	)
 	authHandler := handler.NewAuth(authUsecase, cfg.SecureCookie)
 	prosodyHandler := handler.NewProsody(usecase.NewProsody(prosodyClient))
+	blockRepo := postgres.NewBlockRepository(pool)
 	postHandler := handler.NewPost(usecase.NewPost(
-		postgres.NewPostRepository(pool), prosodyClient, time.Now,
+		postgres.NewPostRepository(pool), prosodyClient, blockRepo, time.Now,
+	))
+	moderationHandler := handler.NewModeration(usecase.NewModeration(
+		postgres.NewUserRepository(pool),
+		postgres.NewPostRepository(pool),
+		postgres.NewReportRepository(pool),
+		blockRepo,
 	))
 	followHandler := handler.NewFollow(usecase.NewFollow(
 		postgres.NewUserRepository(pool), postgres.NewFollowRepository(pool),
@@ -108,6 +115,9 @@ func run() error {
 	v1.DELETE("/posts/:id", postHandler.Delete, handler.RequireAuth(authUsecase))
 	v1.PUT("/users/:handle/follow", followHandler.Follow, handler.RequireAuth(authUsecase))
 	v1.DELETE("/users/:handle/follow", followHandler.Unfollow, handler.RequireAuth(authUsecase))
+	v1.POST("/posts/:id/report", moderationHandler.Report, handler.RequireAuth(authUsecase))
+	v1.PUT("/users/:handle/block", moderationHandler.Block, handler.RequireAuth(authUsecase))
+	v1.DELETE("/users/:handle/block", moderationHandler.Unblock, handler.RequireAuth(authUsecase))
 
 	address := fmt.Sprintf(":%d", cfg.Port)
 	go func() {
