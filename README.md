@@ -339,6 +339,35 @@ curl -s -b /tmp/cookies -X DELETE localhost:8080/api/v1/users/bob/follow
 （[BR-10](docs/design/basic/02-domain-model.md#関係に関するルール)）。
 404 なら存在しない識別名・退会済みと区別がつきません。
 
+### 通報・ブロックを試す
+
+```bash
+# 投稿を通報する（POST。同じ投稿への2回目は 409）
+curl -s -b /tmp/cookies -X POST localhost:8080/api/v1/posts/1/report \
+  -H 'Content-Type: application/json' -d '{"reason":"spam","comment":"宣伝です"}'
+# {"id":"1","reason":"spam","status":"pending","created_at":"..."}
+
+# ブロックする（PUT。冪等）
+curl -s -b /tmp/cookies -X PUT localhost:8080/api/v1/users/bob/block
+# {"blocked":true}
+```
+
+**ブロックするとフォロー関係が双方向に消えます**
+（[BR-08](docs/design/basic/02-domain-model.md#br-08-の設計意図)）。
+ブロックとフォロー解除は1トランザクションで行うため、
+「ブロックはできたがフォローが残る」状態は生じません。
+
+ブロックした相手の投稿は **双方向で** 見えなくなります
+（[BR-09](docs/design/basic/02-domain-model.md#br-09-は双方向に効く)）。
+
+| 閲覧者 | 投稿 | 結果 |
+| --- | --- | --- |
+| ブロックした側 | 相手の投稿 | 404 |
+| ブロックされた側 | 相手の投稿 | 404 |
+| 未ログイン | どちらの投稿も | 200 |
+
+解除すると再び見えますが、**フォロー関係は復活しません。**
+
 ### prosody が落ちているときの振る舞いを試す
 
 ```bash
