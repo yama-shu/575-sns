@@ -129,6 +129,7 @@ docker compose up --build
 | `docker compose logs -f prosody` | 特定サービスのログを追う |
 | `docker compose down` | 停止する（DB のデータは残る） |
 | `docker compose down -v` | 停止してデータも破棄する |
+| `docker compose run --rm cleanup` | 期限切れセッションを削除する（[後述](#期限切れセッションの削除)） |
 
 `docker compose up` は [compose.override.yaml](compose.override.yaml) を自動的に読み込みます。
 開発時にだけ必要なもの（ホットリロード用のバインドマウント、デバッグ用のポート公開）は
@@ -181,6 +182,24 @@ SQL はバイナリに埋め込まれる（`embed`）ため、ファイルを配
 マイグレーションが途中で失敗すると `dirty` 状態になり、以降の適用が拒否されます。
 `migrate version` が異常終了して dirty と表示されたら、
 スキーマの実態を確認したうえで `schema_migrations` テーブルを手で修正してください。
+
+### 期限切れセッションの削除
+
+サーバー側でセッションを持つため（[ADR-0006](docs/adr/0006-authentication.md)）、
+期限切れの行を定期的に削除します。
+
+```bash
+docker compose run --rm cleanup
+# {"level":"INFO","msg":"期限切れセッションを削除しました","service":"cleanup",
+#  "event":"session_cleanup_completed","deleted":3,"duration_ms":67}
+```
+
+`docker compose up` では起動しません（`profiles` を付けています）。
+ローカルでセッションが溜まっても困らないためです。
+
+**api の中でタイマーは回していません。** 本番では api が複数の Pod にスケールするため、
+Pod の数だけ同じ削除が走ります。`migrate` と同じく独立したバイナリにし、
+Kubernetes では CronJob として実行します（M5）。
 
 ### 公開されるポート
 
