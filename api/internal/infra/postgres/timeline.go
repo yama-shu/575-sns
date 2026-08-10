@@ -52,49 +52,98 @@ const notBlocked = `
 func (r *TimelineRepository) Public(
 	ctx context.Context, q domain.TimelineQuery,
 ) ([]domain.TimelineItem, error) {
-	query := `
-		SELECT ` + selectColumns + `
-		FROM posts p
-		JOIN users u ON u.id = p.author_id
-		WHERE p.status = 'published'
-		  AND p.visibility = 'public'
-		  AND ($2::bigint = 0 OR p.id < $2)
-		  AND ` + notBlocked + `
-		ORDER BY p.id DESC
-		LIMIT $3`
-
-	rows, err := r.pool.Query(ctx, query, q.ViewerID, q.Cursor, q.EffectiveLimit())
+	rows, err := r.pool.Query(ctx, publicTimelineQuery, q.ViewerID, q.Cursor, q.EffectiveLimit())
 	if err != nil {
 		return nil, fmt.Errorf("全体タイムラインを取得できません: %w", err)
 	}
 	return scanTimeline(rows)
 }
 
+// notBlockedFollowee はブロック関係にあるフォロー先を除外する条件。
+//
+// **投稿ではなくフォロー先の単位で除外する。** ブロックは利用者どうしの関係であり、
+// ブロックした相手の投稿は1件残らず見えない。フォロー先の段階で落とせば、
+// LATERAL が「フォロー数 × limit 件」を読む前提が崩れない。
+//
+// **相手の一覧を1回で集めてから除外する。** フォロー先ごとに NOT EXISTS を
+// 評価すると、500 フォローで 49.2 ms かかった。1回にまとめて 18.3 ms になる
+// （docs/perf/0002 §10）。
+const notBlockedFollowee = `
+	f.followee_id <> ALL (
+		SELECT CASE WHEN b.blocker_id = $1 THEN b.blocked_id ELSE b.blocker_id END
+		FROM blocks b
+		WHERE b.blocker_id = $1 OR b.blocked_id = $1
+	)`
+
 // Home はフォロー中タイムラインを返す。
 //
 // **visibility で絞らない。** フォローしている相手の followers 限定の投稿は
 // 見えるべきであり、インデックス #7 が visibility を条件に含めていないのも
 // このためである。
+//
+// # LATERAL を使う理由
+//
+// 素直に JOIN で書くと、プランナは posts を id 降順に辿りながら1行ずつ
+// follows を引いて絞る計画を選ぶ。読む行数は
+// 「limit ÷ フォロー先の投稿が全体に占める割合」に比例し、
+// **フォロー数が少ない利用者ほど大量に読む**（docs/perf/0002 §6-B）。
+//
+// フォロー先ごとに上位 limit 件を取ってから全体で上位 limit 件を選べば、
+// 読む行数は「フォロー数 × limit」で頭打ちになり、投稿総数に依存しない。
+// インデックス #7（author_id, id DESC）をフォロー先ごとに辿るため、
+// 設計が想定した使われ方にもなる。
+//
+// 取りこぼしは起きない。ある投稿が全体の上位 limit 件に入るなら、
+// その投稿者の中でも上位 limit 件に入るためである。
 func (r *TimelineRepository) Home(
 	ctx context.Context, q domain.TimelineQuery,
 ) ([]domain.TimelineItem, error) {
-	query := `
-		SELECT ` + selectColumns + `
-		FROM posts p
-		JOIN users u ON u.id = p.author_id
-		JOIN follows f ON f.followee_id = p.author_id AND f.follower_id = $1
-		WHERE p.status = 'published'
-		  AND ($2::bigint = 0 OR p.id < $2)
-		  AND ` + notBlocked + `
-		ORDER BY p.id DESC
-		LIMIT $3`
-
-	rows, err := r.pool.Query(ctx, query, q.ViewerID, q.Cursor, q.EffectiveLimit())
+	rows, err := r.pool.Query(ctx, homeTimelineQuery, q.ViewerID, q.Cursor, q.EffectiveLimit())
 	if err != nil {
 		return nil, fmt.Errorf("フォロー中タイムラインを取得できません: %w", err)
 	}
 	return scanTimeline(rows)
 }
+
+// publicTimelineQuery は全体タイムラインのクエリ。
+//
+// インデックス #6（`(id DESC) WHERE status='published' AND visibility='public'`）を
+// そのまま辿れるよう、条件を部分インデックスの述語と一致させる。
+//
+// **実行計画のテストはこの定数を使う。** テスト側にクエリを書き写すと、
+// 実装を変えたときにテストが古いクエリを検査し続ける（#41 で判明）。
+const publicTimelineQuery = `
+	SELECT ` + selectColumns + `
+	FROM posts p
+	JOIN users u ON u.id = p.author_id
+	WHERE p.status = 'published'
+	  AND p.visibility = 'public'
+	  AND ($2::bigint = 0 OR p.id < $2)
+	  AND ` + notBlocked + `
+	ORDER BY p.id DESC
+	LIMIT $3`
+
+// homeTimelineQuery はフォロー中タイムラインのクエリ。
+const homeTimelineQuery = `
+	SELECT ` + selectColumns + `
+	FROM (
+		SELECT p.*
+		FROM follows f
+		JOIN LATERAL (
+			SELECT *
+			FROM posts p
+			WHERE p.author_id = f.followee_id
+			  AND p.status = 'published'
+			  AND ($2::bigint = 0 OR p.id < $2)
+			ORDER BY p.id DESC
+			LIMIT $3
+		) p ON true
+		WHERE f.follower_id = $1
+		  AND ` + notBlockedFollowee + `
+	) p
+	JOIN users u ON u.id = p.author_id
+	ORDER BY p.id DESC
+	LIMIT $3`
 
 // scanTimeline は行を読み取る。
 func scanTimeline(rows pgx.Rows) ([]domain.TimelineItem, error) {
