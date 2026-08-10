@@ -89,6 +89,9 @@ func run() error {
 	postHandler := handler.NewPost(usecase.NewPost(
 		postgres.NewPostRepository(pool), prosodyClient, blockRepo, time.Now,
 	))
+	timelineHandler := handler.NewTimeline(usecase.NewTimeline(
+		postgres.NewTimelineRepository(pool),
+	))
 	moderationHandler := handler.NewModeration(usecase.NewModeration(
 		postgres.NewUserRepository(pool),
 		postgres.NewPostRepository(pool),
@@ -118,6 +121,10 @@ func run() error {
 	v1.POST("/posts/:id/report", moderationHandler.Report, handler.RequireAuth(authUsecase))
 	v1.PUT("/users/:handle/block", moderationHandler.Block, handler.RequireAuth(authUsecase))
 	v1.DELETE("/users/:handle/block", moderationHandler.Unblock, handler.RequireAuth(authUsecase))
+	// 全体タイムラインは未ログインでも見られる。ログイン済みならブロックの除外と
+	// liked_by_me が効くよう、利用者を載せる（OptionalAuth）。
+	v1.GET("/timelines/public", timelineHandler.Public, handler.OptionalAuth(authUsecase))
+	v1.GET("/timelines/home", timelineHandler.Home, handler.RequireAuth(authUsecase))
 
 	address := fmt.Sprintf(":%d", cfg.Port)
 	go func() {
