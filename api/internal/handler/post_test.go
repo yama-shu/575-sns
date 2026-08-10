@@ -63,6 +63,32 @@ func poster() *domain.User {
 	return &domain.User{ID: 10, Handle: "yamada", DisplayName: "やまだ"}
 }
 
+// publishedPost は公開済みの投稿。
+func publishedPost() *domain.Post {
+	return &domain.Post{
+		ID: 1234, AuthorID: 10,
+		Body:    "今日もまた会議のための会議かな",
+		Verdict: domain.VerdictTeikei, Break1: 5, Break2: 11,
+		MoraKami: 5, MoraNaka: 7, MoraShimo: 5,
+		Visibility: domain.VisibilityPublic, Status: domain.PostPublished,
+		CreatedAt: time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC),
+	}
+}
+
+func hachoAnalysis() *domain.Analysis {
+	return &domain.Analysis{
+		Verdict: domain.VerdictHacho, Reason: domain.ReasonTooFewMora,
+		Reading: "キョウハツカレタ", TotalMora: 8,
+	}
+}
+
+func unknownAnalysis() *domain.Analysis {
+	return &domain.Analysis{
+		Verdict: domain.VerdictUnknown, Reason: domain.ReasonReadingUnavailable,
+		Unreadable: []string{"甃"},
+	}
+}
+
 func teikeiAnalysis() *domain.Analysis {
 	return &domain.Analysis{
 		Verdict:        domain.VerdictTeikei,
