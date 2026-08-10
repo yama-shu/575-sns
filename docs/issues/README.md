@@ -190,6 +190,7 @@ flowchart LR
 | [0010](0010-feat-authentication.md) | `feat` | 認証（登録・ログイン・ログアウト・セッション）を実装する | [#25](https://github.com/yama-shu/575-sns/issues/25) |
 | [0011](0011-feat-prosody-client.md) | `feat` | prosody クライアントと判定エンドポイントを実装する | [#28](https://github.com/yama-shu/575-sns/issues/28) |
 | [0012](0012-feat-post-crud.md) | `feat` | 投稿の作成・取得・削除を実装する | [#30](https://github.com/yama-shu/575-sns/issues/30) |
+| [0013](0013-chore-session-cleanup-job.md) | `chore` | 期限切れセッションを削除する定期ジョブを実装する | [#32](https://github.com/yama-shu/575-sns/issues/32) |
 
 ### M5 公開（起票済みのもの）
 
@@ -213,7 +214,6 @@ flowchart LR
 | 種別 | タイトル |
 | --- | --- |
 | `feat` | レート制限を実装する（[NFR-04-05](../requirements/01-requirements.md#nfr-04-セキュリティ) / [基本設計 05](../design/basic/05-api.md#レート制限)） |
-| `chore` | 期限切れセッションを削除する定期ジョブを実装する |
 
 > **レート制限は先に ADR が必要になる可能性が高い。**
 > [基本設計 05](../design/basic/05-api.md#レート制限) は制限値を定めているが、実装方法を定めていない。
