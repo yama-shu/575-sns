@@ -587,3 +587,175 @@ func TestPostBodyColumnMatchesDomainLimit(t *testing.T) {
 			maxLength, domain.BodyMaxLength)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// フォロー
+// ---------------------------------------------------------------------------
+
+func TestFollowRepository(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	follows := postgres.NewFollowRepository(pool)
+	ctx := context.Background()
+
+	alice, err := users.Create(ctx, newUser("alice"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	bob, err := users.Create(ctx, newUser("bob"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	t.Run("フォローして確認できる", func(t *testing.T) {
+		if err := follows.Follow(ctx, alice.ID, bob.ID); err != nil {
+			t.Fatalf("フォローできない: %v", err)
+		}
+		following, err := follows.IsFollowing(ctx, alice.ID, bob.ID)
+		if err != nil || !following {
+			t.Errorf("フォロー関係が無い: %v %v", following, err)
+		}
+		// 向きが逆の関係を拾わないこと。
+		reverse, err := follows.IsFollowing(ctx, bob.ID, alice.ID)
+		if err != nil || reverse {
+			t.Errorf("向きが逆の関係を拾っている: %v %v", reverse, err)
+		}
+	})
+
+	t.Run("二重フォローが主キー違反にならない", func(t *testing.T) {
+		// ON CONFLICT DO NOTHING で冪等にしている。
+		// 事前確認してから INSERT する実装だと、ここで 500 になる。
+		for range 3 {
+			if err := follows.Follow(ctx, alice.ID, bob.ID); err != nil {
+				t.Fatalf("2回目以降のフォローで失敗した: %v", err)
+			}
+		}
+		count, err := follows.CountFollowers(ctx, bob.ID)
+		if err != nil || count != 1 {
+			t.Errorf("フォロワー数が違う: %d %v", count, err)
+		}
+	})
+
+	t.Run("解除は冪等", func(t *testing.T) {
+		if err := follows.Unfollow(ctx, alice.ID, bob.ID); err != nil {
+			t.Fatalf("解除できない: %v", err)
+		}
+		// 2回目も落ちない。リトライの二重送信で 500 を返す理由がない。
+		if err := follows.Unfollow(ctx, alice.ID, bob.ID); err != nil {
+			t.Errorf("2回目の解除で失敗した: %v", err)
+		}
+		following, err := follows.IsFollowing(ctx, alice.ID, bob.ID)
+		if err != nil || following {
+			t.Errorf("関係が残っている: %v %v", following, err)
+		}
+	})
+}
+
+// BR-05: 自分自身をフォローできない。
+// アプリケーション側の検証をすり抜けても DB が最後の砦になる。
+func TestFollowRepositoryRejectsSelfFollow(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	follows := postgres.NewFollowRepository(pool)
+	ctx := context.Background()
+
+	user, err := users.Create(ctx, newUser("solo"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	if err := follows.Follow(ctx, user.ID, user.ID); err == nil {
+		t.Error("自分自身をフォローできてしまった")
+	}
+}
+
+func TestFollowRepositoryCountFollowers(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	follows := postgres.NewFollowRepository(pool)
+	ctx := context.Background()
+
+	star, err := users.Create(ctx, newUser("star"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	count, err := follows.CountFollowers(ctx, star.ID)
+	if err != nil || count != 0 {
+		t.Errorf("初期値が 0 でない: %d %v", count, err)
+	}
+
+	for _, handle := range []string{"fan1", "fan2", "fan3"} {
+		fan, err := users.Create(ctx, newUser(handle))
+		if err != nil {
+			t.Fatalf("登録できない: %v", err)
+		}
+		if err := follows.Follow(ctx, fan.ID, star.ID); err != nil {
+			t.Fatalf("フォローできない: %v", err)
+		}
+	}
+
+	count, err = follows.CountFollowers(ctx, star.ID)
+	if err != nil || count != 3 {
+		t.Errorf("フォロワー数が違う: %d %v", count, err)
+	}
+	// フォロー中の数を数えていないこと（向きの取り違え）。
+	fanCount, err := follows.CountFollowers(ctx, star.ID)
+	if err != nil {
+		t.Fatalf("取得できない: %v", err)
+	}
+	var followingCount int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM follows WHERE follower_id = $1`, star.ID).Scan(&followingCount); err != nil {
+		t.Fatalf("件数を取得できない: %v", err)
+	}
+	if fanCount == followingCount && fanCount != 0 {
+		t.Errorf("フォロワー数とフォロー中の数を取り違えている可能性がある: %d", fanCount)
+	}
+}
+
+func TestFollowRepositoryIsBlocked(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	follows := postgres.NewFollowRepository(pool)
+	ctx := context.Background()
+
+	blocker, err := users.Create(ctx, newUser("blocker"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	blocked, err := users.Create(ctx, newUser("blocked"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	if got, err := follows.IsBlocked(ctx, blocker.ID, blocked.ID); err != nil || got {
+		t.Errorf("ブロックしていないのに true: %v %v", got, err)
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)`,
+		blocker.ID, blocked.ID); err != nil {
+		t.Fatalf("ブロックを作れない: %v", err)
+	}
+
+	if got, err := follows.IsBlocked(ctx, blocker.ID, blocked.ID); err != nil || !got {
+		t.Errorf("ブロックしているのに false: %v %v", got, err)
+	}
+	// 向きが逆のブロックを拾わないこと。
+	// 取り違えると、ブロックされた側の操作を誤って許してしまう。
+	if got, err := follows.IsBlocked(ctx, blocked.ID, blocker.ID); err != nil || got {
+		t.Errorf("向きが逆のブロックを拾っている: %v %v", got, err)
+	}
+}
