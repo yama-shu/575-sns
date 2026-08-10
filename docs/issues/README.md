@@ -201,6 +201,7 @@ flowchart LR
 | [0016](0016-feat-timeline.md) | `feat` | タイムライン取得（全体 / フォロー中）を実装する | [#38](https://github.com/yama-shu/575-sns/issues/38) |
 | [0017](0017-perf-timeline-explain.md) | `perf` | タイムラインの実行計画を確認しインデックスの効果を検証する | [#40](https://github.com/yama-shu/575-sns/issues/40) |
 | [0018](0018-feat-like.md) | `feat` | いいねを実装する（アトミックな件数更新） | [#43](https://github.com/yama-shu/575-sns/issues/43) |
+| [0019](0019-perf-timeline-lateral.md) | `perf` | フォロー中タイムラインを `LATERAL` で書き換える | [#41](https://github.com/yama-shu/575-sns/issues/41) |
 
 ### M5 公開（起票済みのもの）
 
@@ -246,7 +247,7 @@ flowchart LR
 | 3 | `feat` | タイムライン取得（全体 / フォロー中）を実装する（[0016](0016-feat-timeline.md) / [#38](https://github.com/yama-shu/575-sns/issues/38)） | 1, 2 |
 | 4 | `perf` | タイムラインの実行計画を確認しインデックスの効果を検証する（[0017](0017-perf-timeline-explain.md) / [#40](https://github.com/yama-shu/575-sns/issues/40)） | 3 |
 | 5 | `feat` | いいねを実装する（アトミックな件数更新）（[0018](0018-feat-like.md) / [#43](https://github.com/yama-shu/575-sns/issues/43)） | — |
-| 6 | `perf` | フォロー中タイムラインを `LATERAL` で書き換える（[#41](https://github.com/yama-shu/575-sns/issues/41)） | 4 |
+| 6 | `perf` | フォロー中タイムラインを `LATERAL` で書き換える（[0019](0019-perf-timeline-lateral.md) / [#41](https://github.com/yama-shu/575-sns/issues/41)） | 4 |
 
 > **`blocks` の除外は [#40](https://github.com/yama-shu/575-sns/issues/40) で確認済み。**
 > 549 行のテーブルを1回だけ読んで保持する計画になり、追加のインデックスは不要と判断した。
