@@ -36,13 +36,46 @@ psql -t -c "SELECT '  shared_buffers = ' || current_setting('shared_buffers')
                 || ' / effective_cache_size = ' || current_setting('effective_cache_size');"
 echo
 
-# explain は EXPLAIN (ANALYZE, BUFFERS) を実行する。
-# 1回目はキャッシュが冷えているため、2回実行して2回目を採る。
+# RUNS は計測の回数。1回目は捨てる。
+#
+# **1回だけでは代表値にならない。** 実行ごとに 2〜3 割ぶれるため、
+# 単発の値を記録すると再現しない数値を残すことになる（#40 で判明）。
+RUNS=6
+
+# median は標準入力の数値の中央値を返す。
+median() { sort -n | awk '{a[NR]=$1} END{print a[int((NR+1)/2)]}'; }
+
+# explain は実行計画を1回表示し、実行時間の中央値を添える。
 explain() {
   local title="$1" query="$2"
   echo "--- ${title} ---"
+
+  # 計画の全文（1回目は捨てているため、キャッシュが温まった状態のもの）
   psql -q -c "EXPLAIN (ANALYZE, BUFFERS) ${query}" > /dev/null
   psql -c "EXPLAIN (ANALYZE, BUFFERS) ${query}"
+
+  # 実行時間の中央値
+  local times=()
+  for ((i = 2; i <= RUNS; i++)); do
+    times+=("$(psql -t -c "EXPLAIN (ANALYZE) ${query}" | grep 'Execution Time' | grep -oE '[0-9.]+')")
+  done
+  printf '  → 実行時間の中央値（%d回）: %s ms\n' "$((RUNS - 1))" \
+    "$(printf '%s\n' "${times[@]}" | median)"
+  echo
+}
+
+# time_only は実行時間とバッファ数だけを中央値付きで出す。
+time_only() {
+  local title="$1" query="$2"
+  echo "--- ${title} ---"
+  psql -q -c "EXPLAIN (ANALYZE, BUFFERS) ${query}" > /dev/null
+  psql -c "EXPLAIN (ANALYZE, BUFFERS) ${query}" | grep -E "Execution Time|Buffers: shared" | head -2
+  local times=()
+  for ((i = 2; i <= RUNS; i++)); do
+    times+=("$(psql -t -c "EXPLAIN (ANALYZE) ${query}" | grep 'Execution Time' | grep -oE '[0-9.]+')")
+  done
+  printf '  → 実行時間の中央値（%d回）: %s ms\n' "$((RUNS - 1))" \
+    "$(printf '%s\n' "${times[@]}" | median)"
   echo
 }
 
@@ -92,28 +125,16 @@ done
 
 echo "== 4. OFFSET 方式との比較 =="
 for offset in 0 1000 20000 100000; do
-  echo "--- OFFSET ${offset} ---"
-  psql -q -c "EXPLAIN (ANALYZE, BUFFERS)
+  time_only "OFFSET ${offset}" "
     SELECT p.id FROM posts p
     WHERE p.status = 'published' AND p.visibility = 'public'
-    ORDER BY p.id DESC LIMIT 20 OFFSET ${offset}" > /dev/null
-  psql -c "EXPLAIN (ANALYZE, BUFFERS)
-    SELECT p.id FROM posts p
-    WHERE p.status = 'published' AND p.visibility = 'public'
-    ORDER BY p.id DESC LIMIT 20 OFFSET ${offset}" | grep -E "Execution Time|Buffers: shared|Limit"
-  echo
+    ORDER BY p.id DESC LIMIT 20 OFFSET ${offset}"
 done
 
 echo "== 5. カーソル方式の同条件（比較用） =="
 for cursor in 120001 119000 100000 20001; do
-  echo "--- cursor = ${cursor} ---"
-  psql -q -c "EXPLAIN (ANALYZE, BUFFERS)
+  time_only "cursor = ${cursor}" "
     SELECT p.id FROM posts p
     WHERE p.status = 'published' AND p.visibility = 'public' AND p.id < ${cursor}
-    ORDER BY p.id DESC LIMIT 20" > /dev/null
-  psql -c "EXPLAIN (ANALYZE, BUFFERS)
-    SELECT p.id FROM posts p
-    WHERE p.status = 'published' AND p.visibility = 'public' AND p.id < ${cursor}
-    ORDER BY p.id DESC LIMIT 20" | grep -E "Execution Time|Buffers: shared|Limit"
-  echo
+    ORDER BY p.id DESC LIMIT 20"
 done
