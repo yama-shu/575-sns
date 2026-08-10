@@ -8,10 +8,10 @@ import (
 
 // Moderation は通報とブロックの業務ロジック。
 type Moderation struct {
-	users   domain.UserRepository
-	posts   domain.PostRepository
-	reports domain.ReportRepository
-	blocks  domain.BlockRepository
+	users      domain.UserRepository
+	reports    domain.ReportRepository
+	blocks     domain.BlockRepository
+	visibility visibility
 }
 
 // NewModeration をつくる。
@@ -21,7 +21,12 @@ func NewModeration(
 	reports domain.ReportRepository,
 	blocks domain.BlockRepository,
 ) *Moderation {
-	return &Moderation{users: users, posts: posts, reports: reports, blocks: blocks}
+	return &Moderation{
+		users:      users,
+		reports:    reports,
+		blocks:     blocks,
+		visibility: visibility{posts: posts, blocks: blocks},
+	}
 }
 
 // ReportInput は通報の入力。
@@ -37,25 +42,15 @@ type ReportInput struct {
 // **冪等にしない。** 2件目を作らないだけでなく、作られなかったことを
 // 伝える必要がある。黙って成功を返すと「通報が届いた」と誤解する。
 func (m *Moderation) Report(ctx context.Context, in ReportInput) (*domain.Report, error) {
-	post, _, err := m.posts.FindByID(ctx, in.PostID)
+	// 見えない投稿は通報できない。見えないものを通報する経路が無い。
+	// 削除済み・非表示・ブロックの判定は visibility に集約している。
+	post, _, err := m.visibility.resolve(ctx, in.PostID, &in.ReporterID)
 	if err != nil {
 		return nil, err
-	}
-	// 削除済み・非表示は通報できない。運営が対応する対象がすでに無い。
-	if post.Status != domain.PostPublished {
-		return nil, domain.ErrNotFound
 	}
 	// BR-07。DB の CHECK 制約では表現できないため、ここで担保する。
 	if post.AuthorID == in.ReporterID {
 		return nil, domain.ErrCannotReportSelf
-	}
-	// 見えない投稿は通報できない。見えないものを通報する経路が無い。
-	blocked, err := m.blocks.IsBlockedEitherWay(ctx, in.ReporterID, post.AuthorID)
-	if err != nil {
-		return nil, err
-	}
-	if blocked {
-		return nil, domain.ErrNotFound
 	}
 
 	report, err := domain.NewReport(in.ReporterID, in.PostID, in.Reason, in.Comment)

@@ -11,10 +11,10 @@ import (
 
 // Post は投稿の業務ロジック。
 type Post struct {
-	posts    domain.PostRepository
-	analyzer domain.Analyzer
-	blocks   domain.BlockRepository
-	now      Clock
+	posts      domain.PostRepository
+	analyzer   domain.Analyzer
+	visibility visibility
+	now        Clock
 }
 
 // NewPost は投稿のユースケースをつくる。
@@ -27,7 +27,12 @@ func NewPost(
 	if now == nil {
 		now = time.Now
 	}
-	return &Post{posts: posts, analyzer: analyzer, blocks: blocks, now: now}
+	return &Post{
+		posts:      posts,
+		analyzer:   analyzer,
+		visibility: visibility{posts: posts, blocks: blocks},
+		now:        now,
+	}
 }
 
 // CreateInput は投稿の入力。
@@ -92,35 +97,9 @@ func (p *Post) Create(ctx context.Context, in CreateInput) (*PostView, error) {
 // 見られない投稿は 404 とする。403 にすると
 // 「その ID の投稿は存在するがフォロワー限定である」ことを教えてしまう。
 func (p *Post) Get(ctx context.Context, id int64, viewerID *int64) (*PostView, error) {
-	post, author, err := p.posts.FindByID(ctx, id)
+	post, author, err := p.visibility.resolve(ctx, id, viewerID)
 	if err != nil {
 		return nil, err
-	}
-
-	// BR-09: ブロックした相手の投稿は表示されない。
-	//
-	// **双方向で見る。** 片方向だと、ブロックされた側は投稿を読み続けられ、
-	// 「見られたくない」という意図が満たされない。
-	// 未ログインは確認しない。誰でもない相手をブロックすることはできない。
-	if viewerID != nil {
-		blocked, err := p.blocks.IsBlockedEitherWay(ctx, *viewerID, post.AuthorID)
-		if err != nil {
-			return nil, err
-		}
-		if blocked {
-			return nil, domain.ErrNotFound
-		}
-	}
-
-	isFollower := false
-	if viewerID != nil && post.Visibility == domain.VisibilityFollowers {
-		isFollower, err = p.posts.IsFollowing(ctx, *viewerID, post.AuthorID)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if !post.IsVisibleTo(viewerID, isFollower) {
-		return nil, domain.ErrNotFound
 	}
 
 	view := &PostView{Post: post, Author: author}
