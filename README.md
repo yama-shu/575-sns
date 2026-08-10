@@ -23,10 +23,12 @@
 | 要件定義 | ✅ 完了 |
 | 基本設計 | ✅ 完了 |
 | 詳細設計 | ✅ 完了 |
-| 実装 | 🔵 進行中（M0 開発基盤） |
+| 実装 | 🔵 進行中（M2 API 基盤） |
 
-現在は **M0（開発基盤）** の段階です。各サービスは起動と疎通確認ができる骨組みまでで、
-五七五の判定ロジックは未実装です（[M1 のチケット](https://github.com/yama-shu/575-sns/milestone/2)で実装します）。
+M0（開発基盤）と M1（判定エンジン）は完了しています。
+現在は **M2（API 基盤）** の段階で、認証・判定 API・投稿までが動きます。
+タイムラインといいね・フォローは M3、画面は M4 です
+（[マイルストーン](https://github.com/yama-shu/575-sns/milestones)）。
 
 ---
 
@@ -262,17 +264,49 @@ curl -s -b /tmp/cookies -X POST localhost:8080/api/v1/prosody/check \
 # {"verdict":"teikei","total_mora":17}
 ```
 
+### 投稿を試す
+
+```bash
+# 投稿する（判定はサーバー側で行う。クライアントの判定結果は受け取らない）
+curl -s -b /tmp/cookies -X POST localhost:8080/api/v1/posts \
+  -H 'Content-Type: application/json' \
+  -d '{"body":"今日もまた会議のための会議かな"}' | jq -c '{id, verdict, segments}'
+# {"id":"1","verdict":"teikei","segments":[{"text":"今日もまた","mora":5},...]}
+
+# 取得（ログイン不要）
+curl -s localhost:8080/api/v1/posts/1 | jq -c '{id, body, author}'
+
+# 削除（投稿者本人のみ。論理削除で行は残る）
+curl -s -b /tmp/cookies -X DELETE localhost:8080/api/v1/posts/1 -o /dev/null -w '%{http_code}\n'
+# 204
+```
+
+**破調は 422 で拒否され、保存されません。** 現在の音数を添えて返します。
+
+```bash
+curl -s -b /tmp/cookies -X POST localhost:8080/api/v1/posts \
+  -H 'Content-Type: application/json' -d '{"body":"今日は疲れた"}' | jq -c .error
+# {"code":"PROSODY_HACHO","message":"五七五になっていません",
+#  "details":{"reason":"TOO_FEW_MORA","total_mora":7,"verdict":"hacho"}}
+```
+
+`verdict` を添えても無視されます。クライアントの判定を信じると、
+「判定OK」という嘘を添えるだけで破調が保存できるためです
+（[基本設計 01 §4](docs/design/basic/01-architecture.md#なぜ2回判定するのか)）。
+
 ### prosody が落ちているときの振る舞いを試す
 
 ```bash
 docker compose stop prosody
 
-# 判定は 503。閲覧系は 200 のまま（縮退運転）
+# 判定と投稿は 503。閲覧系は 200 のまま（縮退運転）
 curl -s -b /tmp/cookies -X POST localhost:8080/api/v1/prosody/check \
   -H 'Content-Type: application/json' -d '{"body":"今日もまた会議のための会議かな"}'
 # {"error":{"code":"PROSODY_UNAVAILABLE","message":"いま詠めません。しばらく経ってからお試しください"}}
 curl -s -b /tmp/cookies -o /dev/null -w '%{http_code}\n' localhost:8080/api/v1/me
 # 200
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8080/api/v1/posts/1
+# 200（判定結果は保存済みのため、閲覧に prosody は要らない）
 
 # 10 回失敗するとサーキットブレーカーが開き、以降は prosody を呼ばずに即座に返る
 for i in $(seq 1 10); do
