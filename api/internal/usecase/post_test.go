@@ -66,6 +66,48 @@ func (f *fakePostRepo) IsLikedBy(context.Context, int64, int64) (bool, error) {
 	return f.liked, f.likedErr
 }
 
+// fakeBlockRepo はブロックの偽物。可視性の判定にだけ使う。
+type fakeBlockRepo struct {
+	blocks map[[2]int64]bool
+	err    error
+
+	blockCalls   int
+	unblockCalls int
+}
+
+func newBlockRepo() *fakeBlockRepo {
+	return &fakeBlockRepo{blocks: map[[2]int64]bool{}}
+}
+
+func (f *fakeBlockRepo) Block(_ context.Context, blockerID, blockedID int64) error {
+	f.blockCalls++
+	if f.err != nil {
+		return f.err
+	}
+	f.blocks[[2]int64{blockerID, blockedID}] = true
+	return nil
+}
+
+func (f *fakeBlockRepo) Unblock(_ context.Context, blockerID, blockedID int64) error {
+	f.unblockCalls++
+	if f.err != nil {
+		return f.err
+	}
+	delete(f.blocks, [2]int64{blockerID, blockedID})
+	return nil
+}
+
+func (f *fakeBlockRepo) IsBlocked(_ context.Context, blockerID, blockedID int64) (bool, error) {
+	return f.blocks[[2]int64{blockerID, blockedID}], f.err
+}
+
+func (f *fakeBlockRepo) IsBlockedEitherWay(_ context.Context, a, b int64) (bool, error) {
+	if f.err != nil {
+		return false, f.err
+	}
+	return f.blocks[[2]int64{a, b}] || f.blocks[[2]int64{b, a}], nil
+}
+
 func author() *domain.User {
 	return &domain.User{ID: 10, Handle: "yamada", DisplayName: "やまだ"}
 }
@@ -86,7 +128,7 @@ func storedPost() *domain.Post {
 
 func TestCreatePostStoresJudgement(t *testing.T) {
 	repo := &fakePostRepo{}
-	p := usecase.NewPost(repo, &fakeAnalyzer{result: teikei()}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{result: teikei()}, newBlockRepo(), fixedClock())
 
 	view, err := p.Create(context.Background(), usecase.CreateInput{
 		Author: author(), Body: "今日もまた会議のための会議かな",
@@ -123,7 +165,7 @@ func TestCreatePostStoresNormalizedText(t *testing.T) {
 	analysis.NormalizedText = "今日もまた会議のための会議かな"
 
 	repo := &fakePostRepo{}
-	p := usecase.NewPost(repo, &fakeAnalyzer{result: analysis}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{result: analysis}, newBlockRepo(), fixedClock())
 
 	// 全角空白を含む入力。正規化で圧縮される。
 	if _, err := p.Create(context.Background(), usecase.CreateInput{
@@ -146,7 +188,7 @@ func TestCreatePostRejectsHachoWithoutSaving(t *testing.T) {
 	analysis := &domain.Analysis{
 		Verdict: domain.VerdictHacho, Reason: domain.ReasonTooFewMora, TotalMora: 8,
 	}
-	p := usecase.NewPost(repo, &fakeAnalyzer{result: analysis}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{result: analysis}, newBlockRepo(), fixedClock())
 
 	_, err := p.Create(context.Background(), usecase.CreateInput{
 		Author: author(), Body: "今日は疲れた",
@@ -172,7 +214,7 @@ func TestCreatePostRejectsUnknownReadingSeparately(t *testing.T) {
 		Verdict: domain.VerdictUnknown, Reason: domain.ReasonReadingUnavailable,
 		Unreadable: []string{"甃"},
 	}
-	p := usecase.NewPost(repo, &fakeAnalyzer{result: analysis}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{result: analysis}, newBlockRepo(), fixedClock())
 
 	_, err := p.Create(context.Background(), usecase.CreateInput{Author: author(), Body: "甃"})
 	var appErr *domain.Error
@@ -191,7 +233,7 @@ func TestCreatePostRejectsUnknownReadingSeparately(t *testing.T) {
 // 判定エンジンが使えないときは保存しない。
 func TestCreatePostPropagatesAnalyzerError(t *testing.T) {
 	repo := &fakePostRepo{}
-	p := usecase.NewPost(repo, &fakeAnalyzer{err: domain.ErrProsodyUnavailable}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{err: domain.ErrProsodyUnavailable}, newBlockRepo(), fixedClock())
 
 	_, err := p.Create(context.Background(), usecase.CreateInput{
 		Author: author(), Body: "今日もまた会議のための会議かな",
@@ -218,7 +260,7 @@ func TestCreatePostValidatesInput(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			repo := &fakePostRepo{}
 			analyzer := &fakeAnalyzer{result: teikei()}
-			p := usecase.NewPost(repo, analyzer, fixedClock())
+			p := usecase.NewPost(repo, analyzer, newBlockRepo(), fixedClock())
 
 			_, err := p.Create(context.Background(), in)
 			var appErr *domain.Error
@@ -240,7 +282,7 @@ func TestPostBodyLimitMatchesSchema(t *testing.T) {
 	}
 
 	repo := &fakePostRepo{}
-	p := usecase.NewPost(repo, &fakeAnalyzer{result: teikei()}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{result: teikei()}, newBlockRepo(), fixedClock())
 	if _, err := p.Create(context.Background(), usecase.CreateInput{
 		Author: author(), Body: strings.Repeat("あ", domain.BodyMaxLength),
 	}); err != nil {
@@ -251,7 +293,7 @@ func TestPostBodyLimitMatchesSchema(t *testing.T) {
 // 公開範囲を指定できること。
 func TestCreatePostAcceptsFollowersVisibility(t *testing.T) {
 	repo := &fakePostRepo{}
-	p := usecase.NewPost(repo, &fakeAnalyzer{result: teikei()}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{result: teikei()}, newBlockRepo(), fixedClock())
 
 	if _, err := p.Create(context.Background(), usecase.CreateInput{
 		Author: author(), Body: "今日もまた会議のための会議かな",
@@ -266,7 +308,7 @@ func TestCreatePostAcceptsFollowersVisibility(t *testing.T) {
 
 func TestGetPost(t *testing.T) {
 	repo := &fakePostRepo{post: storedPost(), author: author(), liked: true}
-	p := usecase.NewPost(repo, &fakeAnalyzer{}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{}, newBlockRepo(), fixedClock())
 
 	viewer := int64(99)
 	view, err := p.Get(context.Background(), 1, &viewer)
@@ -281,7 +323,7 @@ func TestGetPost(t *testing.T) {
 // 未ログインでも公開投稿は見られる。いいねの状態は問い合わせない。
 func TestGetPostWithoutLogin(t *testing.T) {
 	repo := &fakePostRepo{post: storedPost(), author: author(), liked: true}
-	p := usecase.NewPost(repo, &fakeAnalyzer{}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{}, newBlockRepo(), fixedClock())
 
 	view, err := p.Get(context.Background(), 1, nil)
 	if err != nil {
@@ -302,7 +344,7 @@ func TestGetPostHidesDeletedAndHidden(t *testing.T) {
 			post := storedPost()
 			post.Status = status
 			repo := &fakePostRepo{post: post, author: author()}
-			p := usecase.NewPost(repo, &fakeAnalyzer{}, fixedClock())
+			p := usecase.NewPost(repo, &fakeAnalyzer{}, newBlockRepo(), fixedClock())
 
 			if _, err := p.Get(context.Background(), 1, nil); !errors.Is(err, domain.ErrNotFound) {
 				t.Errorf("NOT_FOUND を期待したが %v", err)
@@ -331,7 +373,7 @@ func TestGetFollowersOnlyPost(t *testing.T) {
 			post := storedPost()
 			post.Visibility = domain.VisibilityFollowers
 			repo := &fakePostRepo{post: post, author: author(), following: tt.following}
-			p := usecase.NewPost(repo, &fakeAnalyzer{}, fixedClock())
+			p := usecase.NewPost(repo, &fakeAnalyzer{}, newBlockRepo(), fixedClock())
 
 			_, err := p.Get(context.Background(), 1, tt.viewer)
 			if tt.visible && err != nil {
@@ -346,7 +388,7 @@ func TestGetFollowersOnlyPost(t *testing.T) {
 
 func TestDeletePostByAuthor(t *testing.T) {
 	repo := &fakePostRepo{post: storedPost(), author: author()}
-	p := usecase.NewPost(repo, &fakeAnalyzer{}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{}, newBlockRepo(), fixedClock())
 
 	if err := p.Delete(context.Background(), 1, 10); err != nil {
 		t.Fatalf("削除できない: %v", err)
@@ -362,7 +404,7 @@ func TestDeletePostByAuthor(t *testing.T) {
 // 他人の投稿は削除できない（BR-03）。
 func TestDeletePostByOtherUserIsForbidden(t *testing.T) {
 	repo := &fakePostRepo{post: storedPost(), author: author()}
-	p := usecase.NewPost(repo, &fakeAnalyzer{}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{}, newBlockRepo(), fixedClock())
 
 	err := p.Delete(context.Background(), 1, 99)
 	if !errors.Is(err, domain.ErrForbidden) {
@@ -378,7 +420,7 @@ func TestDeleteAlreadyDeletedPost(t *testing.T) {
 	post := storedPost()
 	post.Status = domain.PostDeleted
 	repo := &fakePostRepo{post: post, author: author()}
-	p := usecase.NewPost(repo, &fakeAnalyzer{}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{}, newBlockRepo(), fixedClock())
 
 	if err := p.Delete(context.Background(), 1, 10); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("NOT_FOUND を期待したが %v", err)
@@ -394,7 +436,7 @@ func TestDeleteAlreadyDeletedPostByOtherUser(t *testing.T) {
 	post := storedPost()
 	post.Status = domain.PostDeleted
 	repo := &fakePostRepo{post: post, author: author()}
-	p := usecase.NewPost(repo, &fakeAnalyzer{}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{}, newBlockRepo(), fixedClock())
 
 	if err := p.Delete(context.Background(), 1, 99); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("NOT_FOUND を期待したが %v", err)
@@ -403,7 +445,7 @@ func TestDeleteAlreadyDeletedPostByOtherUser(t *testing.T) {
 
 func TestDeleteMissingPost(t *testing.T) {
 	repo := &fakePostRepo{findErr: domain.ErrNotFound}
-	p := usecase.NewPost(repo, &fakeAnalyzer{}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{}, newBlockRepo(), fixedClock())
 
 	if err := p.Delete(context.Background(), 999, 10); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("NOT_FOUND を期待したが %v", err)
@@ -412,7 +454,7 @@ func TestDeleteMissingPost(t *testing.T) {
 
 func TestGetMissingPost(t *testing.T) {
 	repo := &fakePostRepo{findErr: domain.ErrNotFound}
-	p := usecase.NewPost(repo, &fakeAnalyzer{}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{}, newBlockRepo(), fixedClock())
 
 	if _, err := p.Get(context.Background(), 999, nil); !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("NOT_FOUND を期待したが %v", err)
@@ -422,7 +464,7 @@ func TestGetMissingPost(t *testing.T) {
 // 保存に失敗したらエラーを返す。
 func TestCreatePostPropagatesRepositoryError(t *testing.T) {
 	repo := &fakePostRepo{createErr: errors.New("保存できない")}
-	p := usecase.NewPost(repo, &fakeAnalyzer{result: teikei()}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{result: teikei()}, newBlockRepo(), fixedClock())
 
 	if _, err := p.Create(context.Background(), usecase.CreateInput{
 		Author: author(), Body: "今日もまた会議のための会議かな",
@@ -434,7 +476,7 @@ func TestCreatePostPropagatesRepositoryError(t *testing.T) {
 // 時計を渡さなければ実時間を使うこと。
 func TestNewPostDefaultsClock(t *testing.T) {
 	repo := &fakePostRepo{post: storedPost(), author: author()}
-	p := usecase.NewPost(repo, &fakeAnalyzer{}, nil)
+	p := usecase.NewPost(repo, &fakeAnalyzer{}, newBlockRepo(), nil)
 
 	before := time.Now()
 	if err := p.Delete(context.Background(), 1, 10); err != nil {
@@ -456,7 +498,7 @@ func TestGetPostPropagatesLookupErrors(t *testing.T) {
 		repo := &fakePostRepo{
 			post: post, author: author(), followingErr: errors.New("確認できない"),
 		}
-		p := usecase.NewPost(repo, &fakeAnalyzer{}, fixedClock())
+		p := usecase.NewPost(repo, &fakeAnalyzer{}, newBlockRepo(), fixedClock())
 
 		if _, err := p.Get(context.Background(), 1, &viewer); err == nil {
 			t.Error("エラーにならない")
@@ -467,7 +509,7 @@ func TestGetPostPropagatesLookupErrors(t *testing.T) {
 		repo := &fakePostRepo{
 			post: storedPost(), author: author(), likedErr: errors.New("確認できない"),
 		}
-		p := usecase.NewPost(repo, &fakeAnalyzer{}, fixedClock())
+		p := usecase.NewPost(repo, &fakeAnalyzer{}, newBlockRepo(), fixedClock())
 
 		if _, err := p.Get(context.Background(), 1, &viewer); err == nil {
 			t.Error("エラーにならない")
@@ -483,7 +525,7 @@ func TestCreatePostRejectsOverlongNormalizedText(t *testing.T) {
 	analysis.NormalizedText = long
 
 	repo := &fakePostRepo{}
-	p := usecase.NewPost(repo, &fakeAnalyzer{result: analysis}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{result: analysis}, newBlockRepo(), fixedClock())
 
 	_, err := p.Create(context.Background(), usecase.CreateInput{
 		Author: author(), Body: "今日もまた会議のための会議かな",
@@ -503,7 +545,7 @@ func TestCreatePostRejectsMalformedAnalysis(t *testing.T) {
 	analysis.Segments = analysis.Segments[:2]
 
 	repo := &fakePostRepo{}
-	p := usecase.NewPost(repo, &fakeAnalyzer{result: analysis}, fixedClock())
+	p := usecase.NewPost(repo, &fakeAnalyzer{result: analysis}, newBlockRepo(), fixedClock())
 
 	if _, err := p.Create(context.Background(), usecase.CreateInput{
 		Author: author(), Body: "今日もまた会議のための会議かな",
@@ -512,5 +554,74 @@ func TestCreatePostRejectsMalformedAnalysis(t *testing.T) {
 	}
 	if repo.createCalls != 0 {
 		t.Errorf("保存された: %d 回", repo.createCalls)
+	}
+}
+
+// BR-09: ブロックした相手の投稿は表示されない。
+//
+// **双方向で確認する。** 片方向だと、ブロックされた側は投稿を読み続けられ、
+// 「見られたくない」という意図が満たされない。
+func TestGetPostHiddenByBlock(t *testing.T) {
+	viewer := int64(99)
+
+	tests := map[string][2]int64{
+		"閲覧者が投稿者をブロックしている": {99, 10},
+		"投稿者が閲覧者をブロックしている": {10, 99},
+	}
+
+	for name, block := range tests {
+		t.Run(name, func(t *testing.T) {
+			blocks := newBlockRepo()
+			blocks.blocks[block] = true
+			repo := &fakePostRepo{post: storedPost(), author: author()}
+			p := usecase.NewPost(repo, &fakeAnalyzer{}, blocks, fixedClock())
+
+			if _, err := p.Get(context.Background(), 1, &viewer); !errors.Is(err, domain.ErrNotFound) {
+				t.Errorf("NOT_FOUND を期待したが %v", err)
+			}
+		})
+	}
+}
+
+// 未ログインはブロックの影響を受けない。
+// 誰でもない相手をブロックすることはできない。
+func TestGetPostWithoutLoginIgnoresBlocks(t *testing.T) {
+	blocks := newBlockRepo()
+	blocks.blocks[[2]int64{10, 99}] = true
+	repo := &fakePostRepo{post: storedPost(), author: author()}
+	p := usecase.NewPost(repo, &fakeAnalyzer{}, blocks, fixedClock())
+
+	if _, err := p.Get(context.Background(), 1, nil); err != nil {
+		t.Errorf("未ログインで取得できない: %v", err)
+	}
+}
+
+// ブロックを解除すると再び見える。
+func TestGetPostVisibleAfterUnblock(t *testing.T) {
+	viewer := int64(99)
+	blocks := newBlockRepo()
+	blocks.blocks[[2]int64{99, 10}] = true
+	repo := &fakePostRepo{post: storedPost(), author: author()}
+	p := usecase.NewPost(repo, &fakeAnalyzer{}, blocks, fixedClock())
+
+	if _, err := p.Get(context.Background(), 1, &viewer); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("ブロック中に見えている: %v", err)
+	}
+	delete(blocks.blocks, [2]int64{99, 10})
+	if _, err := p.Get(context.Background(), 1, &viewer); err != nil {
+		t.Errorf("解除後に見えない: %v", err)
+	}
+}
+
+// ブロックの確認に失敗したら投稿を返さない。
+func TestGetPostPropagatesBlockLookupError(t *testing.T) {
+	viewer := int64(99)
+	blocks := newBlockRepo()
+	blocks.err = errors.New("確認できない")
+	repo := &fakePostRepo{post: storedPost(), author: author()}
+	p := usecase.NewPost(repo, &fakeAnalyzer{}, blocks, fixedClock())
+
+	if _, err := p.Get(context.Background(), 1, &viewer); err == nil {
+		t.Error("エラーにならない")
 	}
 }

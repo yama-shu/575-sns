@@ -13,15 +13,21 @@ import (
 type Post struct {
 	posts    domain.PostRepository
 	analyzer domain.Analyzer
+	blocks   domain.BlockRepository
 	now      Clock
 }
 
 // NewPost は投稿のユースケースをつくる。
-func NewPost(posts domain.PostRepository, analyzer domain.Analyzer, now Clock) *Post {
+func NewPost(
+	posts domain.PostRepository,
+	analyzer domain.Analyzer,
+	blocks domain.BlockRepository,
+	now Clock,
+) *Post {
 	if now == nil {
 		now = time.Now
 	}
-	return &Post{posts: posts, analyzer: analyzer, now: now}
+	return &Post{posts: posts, analyzer: analyzer, blocks: blocks, now: now}
 }
 
 // CreateInput は投稿の入力。
@@ -89,6 +95,21 @@ func (p *Post) Get(ctx context.Context, id int64, viewerID *int64) (*PostView, e
 	post, author, err := p.posts.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+
+	// BR-09: ブロックした相手の投稿は表示されない。
+	//
+	// **双方向で見る。** 片方向だと、ブロックされた側は投稿を読み続けられ、
+	// 「見られたくない」という意図が満たされない。
+	// 未ログインは確認しない。誰でもない相手をブロックすることはできない。
+	if viewerID != nil {
+		blocked, err := p.blocks.IsBlockedEitherWay(ctx, *viewerID, post.AuthorID)
+		if err != nil {
+			return nil, err
+		}
+		if blocked {
+			return nil, domain.ErrNotFound
+		}
 	}
 
 	isFollower := false
