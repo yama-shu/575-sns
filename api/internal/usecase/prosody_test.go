@@ -84,7 +84,7 @@ func TestCheckRejectsInvalidBodyWithoutCallingAnalyzer(t *testing.T) {
 		"空白のみ":   "   ",
 		"全角空白のみ": "　　",
 		"改行のみ":   "\n\n",
-		"長すぎる":   strings.Repeat("あ", usecase.BodyMaxLength+1),
+		"長すぎる":   strings.Repeat("あ", domain.BodyMaxLength+1),
 	}
 
 	for name, body := range tests {
@@ -109,7 +109,7 @@ func TestCheckAcceptsBodyAtMaxLength(t *testing.T) {
 	analyzer := &fakeAnalyzer{result: teikei()}
 	p := usecase.NewProsody(analyzer)
 
-	if _, err := p.Check(context.Background(), strings.Repeat("あ", usecase.BodyMaxLength)); err != nil {
+	if _, err := p.Check(context.Background(), strings.Repeat("あ", domain.BodyMaxLength)); err != nil {
 		t.Errorf("上限ちょうどが弾かれた: %v", err)
 	}
 }
@@ -120,8 +120,8 @@ func TestCheckCountsLengthInRunesNotBytes(t *testing.T) {
 	analyzer := &fakeAnalyzer{result: teikei()}
 	p := usecase.NewProsody(analyzer)
 
-	// 100 文字（UTF-8 で 300 バイト）。上限 140 文字を超えないため通る。
-	if _, err := p.Check(context.Background(), strings.Repeat("あ", 100)); err != nil {
+	// 90 文字（UTF-8 で 270 バイト）。上限 100 文字を超えないため通る。
+	if _, err := p.Check(context.Background(), strings.Repeat("あ", 90)); err != nil {
 		t.Errorf("バイト数で数えている: %v", err)
 	}
 }
