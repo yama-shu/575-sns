@@ -89,6 +89,9 @@ func run() error {
 	postHandler := handler.NewPost(usecase.NewPost(
 		postgres.NewPostRepository(pool), prosodyClient, blockRepo, time.Now,
 	))
+	likeHandler := handler.NewLike(usecase.NewLike(
+		postgres.NewLikeRepository(pool), postgres.NewPostRepository(pool), blockRepo,
+	))
 	timelineHandler := handler.NewTimeline(usecase.NewTimeline(
 		postgres.NewTimelineRepository(pool),
 	))
@@ -125,6 +128,8 @@ func run() error {
 	// liked_by_me が効くよう、利用者を載せる（OptionalAuth）。
 	v1.GET("/timelines/public", timelineHandler.Public, handler.OptionalAuth(authUsecase))
 	v1.GET("/timelines/home", timelineHandler.Home, handler.RequireAuth(authUsecase))
+	v1.PUT("/posts/:id/like", likeHandler.Like, handler.RequireAuth(authUsecase))
+	v1.DELETE("/posts/:id/like", likeHandler.Unlike, handler.RequireAuth(authUsecase))
 
 	address := fmt.Sprintf(":%d", cfg.Port)
 	go func() {
