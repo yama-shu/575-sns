@@ -1,0 +1,731 @@
+openapi: 3.1.0
+
+# 575 の api の契約（基本設計 05 §6）。
+#
+# **この定義は手で書く。** prosody は FastAPI が型ヒントから生成するが、
+# Go には同等の生成元が無いためである。
+#
+# 手で書いた定義は、書いた時点から実装とずれ始める。
+# 生成物のずれは CI で検出できるが、定義と実装のずれは検出できない。
+# そのため api/internal/handler/openapi_test.go で、
+# **実際の応答がこの定義に適合すること**を検査している（#46）。
+#
+# 定義を変えたら次を実行する。
+#
+#   ./scripts/openapi.sh          定義の検証と web の型生成
+#   ./scripts/check.sh            全体の検査
+
+info:
+  title: 575 api
+  version: 0.1.0
+  description: |
+    五七五でしか投稿できない SNS の api。
+
+    M3 までに実装したエンドポイントを収録する。
+    未実装のもの（運営向け・一覧系）は、実装時に追加する。
+    実装より先に書くと必ず食い違うためである。
+  license:
+    name: MIT
+    identifier: MIT
+
+servers:
+  - url: /api/v1
+    description: バージョン付きの API
+
+tags:
+  - name: 認証
+    description: 登録・ログイン・ログアウト・本人取得
+  - name: 判定
+    description: 入力中の五七五判定。保存しない
+  - name: 投稿
+    description: 投稿の作成・取得・削除
+  - name: タイムライン
+    description: 全体・フォロー中の取得
+  - name: 交流
+    description: いいね・フォロー
+  - name: 健全性
+    description: 通報・ブロック
+
+paths:
+  /auth/signup:
+    post:
+      tags: [認証]
+      summary: アカウントを登録する
+      description: |
+        登録に成功するとセッション Cookie を返す。
+        登録と同時にログイン済みになる。
+      operationId: signUp
+      # 認証は不要。未ログインでも使える（基本設計 05 §2）。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SignUpRequest' }
+      responses:
+        '201':
+          description: 登録できた
+          headers:
+            Set-Cookie:
+              description: セッション Cookie（`HttpOnly` / `SameSite=Lax`）
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '409':
+          description: 識別名またはメールアドレスが使用済み
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/login:
+    post:
+      tags: [認証]
+      summary: ログインする
+      description: |
+        **識別名の存在有無を漏らさない。** 存在しない識別名とパスワード誤りで
+        応答が区別できないようにしている（ADR-0006）。
+      operationId: logIn
+      # 認証は不要。未ログインでも使える（基本設計 05 §2）。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LogInRequest' }
+      responses:
+        '200':
+          description: ログインできた
+          headers:
+            Set-Cookie:
+              description: セッション Cookie
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /auth/logout:
+    post:
+      tags: [認証]
+      summary: ログアウトする
+      description: |
+        サーバー側のセッションを削除する。**次のリクエストから即座に効く。**
+      operationId: logOut
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: ログアウトした }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /me:
+    get:
+      tags: [認証]
+      summary: ログイン中の利用者を取得する
+      operationId: getMe
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 取得できた
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /prosody/check:
+    post:
+      tags: [判定]
+      summary: 本文を判定する（保存しない）
+      description: |
+        入力中の判定に使う。**何も保存しない。**
+
+        破調・読めない語も 200 で返る。判定を求められて判定を返しているため、
+        エラーではない。投稿できるかは `verdict` で判断する。
+      operationId: checkProsody
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckRequest' }
+      responses:
+        '200':
+          description: 判定した
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckResult' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '503': { $ref: '#/components/responses/ProsodyUnavailable' }
+        '504': { $ref: '#/components/responses/UpstreamTimeout' }
+
+  /posts:
+    post:
+      tags: [投稿]
+      summary: 投稿する
+      description: |
+        **判定結果を受け取らない。** サーバー側で必ず再判定する（基本設計 01 §4）。
+        リクエストに `verdict` を添えても読まない。
+      operationId: createPost
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePostRequest' }
+      responses:
+        '201':
+          description: 投稿できた
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Post' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422':
+          description: 五七五になっていない、または読みを確定できない
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503': { $ref: '#/components/responses/ProsodyUnavailable' }
+        '504': { $ref: '#/components/responses/UpstreamTimeout' }
+
+  /posts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PostId'
+    get:
+      tags: [投稿]
+      summary: 投稿を取得する
+      description: |
+        ログインは不要。ログイン済みなら `liked_by_me` が返る。
+
+        見えない投稿は 404 とする（削除済み・ブロック関係・フォロワー限定）。
+        理由を区別しない。区別すると存在を教えてしまう。
+      operationId: getPost
+      # 認証は不要。未ログインでも使える（基本設計 05 §2）。
+      security: []
+      responses:
+        '200':
+          description: 取得できた
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Post' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [投稿]
+      summary: 投稿を削除する
+      description: 削除できるのは投稿者本人だけ（BR-03）。論理削除であり行は残る。
+      operationId: deletePost
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: 削除した }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /posts/{id}/like:
+    parameters:
+      - $ref: '#/components/parameters/PostId'
+    put:
+      tags: [交流]
+      summary: いいねする
+      description: '**冪等。** すでにいいね済みでも 200 を返し、件数は増えない。'
+      operationId: likePost
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: いいねしている状態になった
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LikeState' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [交流]
+      summary: いいねを取り消す
+      description: '**冪等。** いいねしていなくても 200 を返す。'
+      operationId: unlikePost
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: いいねしていない状態になった
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LikeState' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /posts/{id}/report:
+    parameters:
+      - $ref: '#/components/parameters/PostId'
+    post:
+      tags: [健全性]
+      summary: 投稿を通報する
+      description: |
+        **冪等にしない。** 同じ投稿への2回目は 409 を返す。
+        黙って成功を返すと「通報が届いた」と誤解するためである。
+      operationId: reportPost
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportRequest' }
+      responses:
+        '201':
+          description: 通報した
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: すでに通報済み
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: 自分の投稿は通報できない（BR-07）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /timelines/public:
+    get:
+      tags: [タイムライン]
+      summary: 全体タイムラインを取得する
+      description: |
+        公開投稿だけを新しい順に返す。ログインは不要。
+
+        ログイン済みなら、ブロック関係にある利用者の投稿が除外され、
+        `liked_by_me` が返る。
+      operationId: getPublicTimeline
+      # 認証は不要。未ログインでも使える（基本設計 05 §2）。
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 取得できた
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Timeline' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+
+  /timelines/home:
+    get:
+      tags: [タイムライン]
+      summary: フォロー中タイムラインを取得する
+      description: |
+        フォローしている利用者の投稿を新しい順に返す。
+        フォロー先の `followers` 限定の投稿も含む。
+      operationId: getHomeTimeline
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 取得できた
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Timeline' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /users/{handle}/follow:
+    parameters:
+      - $ref: '#/components/parameters/Handle'
+    put:
+      tags: [交流]
+      summary: フォローする
+      description: |
+        **冪等。** すでにフォロー済みでも 200 を返す。
+
+        相手が自分をブロックしている場合は 404 とする。
+        422 を返すとブロックされた事実が分かり、BR-10 に反するためである。
+      operationId: follow
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: フォローしている状態になった
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FollowState' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: 自分自身、またはブロックしている相手
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [交流]
+      summary: フォローを外す
+      description: '**冪等。** フォローしていなくても 200 を返す。'
+      operationId: unfollow
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: フォローしていない状態になった
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FollowState' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: 自分自身
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /users/{handle}/block:
+    parameters:
+      - $ref: '#/components/parameters/Handle'
+    put:
+      tags: [健全性]
+      summary: ブロックする
+      description: |
+        **冪等。** すでにブロック済みでも 200 を返す。
+
+        ブロックするとフォロー関係が双方向に解除される（BR-08）。
+      operationId: block
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: ブロックしている状態になった
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlockState' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: 自分自身はブロックできない（BR-06）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [健全性]
+      summary: ブロックを解除する
+      description: '**冪等。** フォロー関係は復活しない。'
+      operationId: unblock
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: ブロックしていない状態になった
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlockState' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: 自分自身
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+      description: |
+        ADR-0006 の Cookie + PostgreSQL セッション。
+        `HttpOnly` / `SameSite=Lax` を付ける。
+
+  parameters:
+    PostId:
+      name: id
+      in: path
+      required: true
+      description: 投稿の ID
+      schema: { type: string, pattern: '^[0-9]+$' }
+    Handle:
+      name: handle
+      in: path
+      required: true
+      description: 利用者の識別名
+      schema: { type: string }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: この ID より前を取得する。省略すると最新から
+      schema: { type: string, pattern: '^[0-9]+$' }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: 取得件数
+      schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+
+  responses:
+    ValidationFailed:
+      description: 入力の形式が不正
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthenticated:
+      description: 未ログイン、またはセッション切れ
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InvalidCredentials:
+      description: 識別名またはパスワードが違う
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: 権限がない
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: 見つからない
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ProsodyUnavailable:
+      description: 判定エンジンを利用できない（縮退運転）
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    UpstreamTimeout:
+      description: 判定エンジンが時間内に応答しなかった
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      description: |
+        エラーの共通形式（基本設計 05 §1）。
+
+        **`code` で分岐する。** `message` は文言が変わりうるため、
+        これで分岐するとクライアントが壊れる。
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: 分岐に使う識別子
+              examples: [VALIDATION_FAILED, PROSODY_HACHO, NOT_FOUND]
+            message:
+              type: string
+              description: 利用者向けの文言
+            details:
+              type: object
+              description: |
+                直すために必要な情報。破調なら現在の音数、
+                読めない語があるならその語。
+              additionalProperties: true
+
+    User:
+      type: object
+      additionalProperties: false
+      description: |
+        利用者の公開情報。
+
+        **メールアドレスとパスワードハッシュを含めない。**
+        本人向けの応答でも、返す必要がないものは返さない。
+      required: [handle, display_name, bio]
+      properties:
+        handle: { type: string, examples: [yamada] }
+        display_name: { type: string, examples: [やまだ] }
+        bio: { type: string }
+        avatar_url: { type: string }
+
+    SignUpRequest:
+      type: object
+      required: [handle, email, password, display_name]
+      properties:
+        handle: { type: string, maxLength: 20 }
+        email: { type: string, format: email, maxLength: 255 }
+        password: { type: string, minLength: 8, maxLength: 72 }
+        display_name: { type: string, maxLength: 50 }
+
+    LogInRequest:
+      type: object
+      required: [handle, password]
+      properties:
+        handle: { type: string }
+        password: { type: string }
+
+    CheckRequest:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, maxLength: 100 }
+
+    Verdict:
+      type: string
+      description: |
+        判定結果。`teikei` と `kyoyo` だけが投稿できる。
+      enum: [teikei, kyoyo, hacho, unknown]
+
+    Reason:
+      type: string
+      description: 判定できなかった理由
+      enum: [TOO_FEW_MORA, TOO_MANY_MORA, NO_VALID_SPLIT, READING_UNAVAILABLE]
+
+    CheckSegment:
+      type: object
+      additionalProperties: false
+      required: [text, reading, mora, expected, diff]
+      properties:
+        text: { type: string }
+        reading: { type: string, description: カタカナの読み }
+        mora: { type: integer }
+        expected: { type: integer, description: '規定のモーラ数（5 / 7 / 5）' }
+        diff: { type: integer, description: 規定との差。字余りが正 }
+
+    CheckResult:
+      type: object
+      additionalProperties: false
+      required: [verdict, total_mora, segments]
+      properties:
+        verdict: { $ref: '#/components/schemas/Verdict' }
+        reading: { type: string }
+        total_mora:
+          type: [integer, 'null']
+          description: '`unknown` のときは null。読みを確定できていないため'
+        segments:
+          type: [array, 'null']
+          description: 五七五に区切れない場合は null
+          items: { $ref: '#/components/schemas/CheckSegment' }
+        reason: { $ref: '#/components/schemas/Reason' }
+        unreadable:
+          type: array
+          description: '`unknown` のとき、読めなかった語'
+          items: { type: string }
+
+    CreatePostRequest:
+      type: object
+      description: |
+        **判定結果を含めない。** 含めても読まない（基本設計 01 §4）。
+      required: [body]
+      properties:
+        body: { type: string, maxLength: 100 }
+        visibility: { $ref: '#/components/schemas/Visibility' }
+
+    Visibility:
+      type: string
+      enum: [public, followers]
+      default: public
+
+    PostSegment:
+      type: object
+      additionalProperties: false
+      required: [text, mora]
+      properties:
+        text: { type: string }
+        mora: { type: integer }
+
+    PostAuthor:
+      type: object
+      additionalProperties: false
+      required: [handle, display_name]
+      properties:
+        handle: { type: string }
+        display_name: { type: string }
+        avatar_url: { type: string }
+
+    Post:
+      type: object
+      additionalProperties: false
+      required:
+        [id, body, verdict, segments, visibility, like_count, liked_by_me, author, created_at]
+      properties:
+        id:
+          type: string
+          description: |
+            **文字列で返す。** BIGINT を JSON の数値で返すと、
+            JavaScript の Number（53bit）で精度が落ちる。
+          pattern: '^[0-9]+$'
+        body: { type: string, description: 正規化後の本文 }
+        verdict: { $ref: '#/components/schemas/Verdict' }
+        segments:
+          type: array
+          items: { $ref: '#/components/schemas/PostSegment' }
+        visibility: { $ref: '#/components/schemas/Visibility' }
+        like_count: { type: integer, minimum: 0 }
+        liked_by_me: { type: boolean }
+        author: { $ref: '#/components/schemas/PostAuthor' }
+        created_at: { type: string, format: date-time }
+
+    Timeline:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Post' }
+        next_cursor:
+          type: [string, 'null']
+          description: 続きが無ければ null
+          pattern: '^[0-9]+$'
+
+    FollowState:
+      type: object
+      additionalProperties: false
+      required: [following, followers_count]
+      properties:
+        following: { type: boolean }
+        followers_count: { type: integer, minimum: 0 }
+
+    LikeState:
+      type: object
+      additionalProperties: false
+      required: [liked, like_count]
+      properties:
+        liked: { type: boolean }
+        like_count: { type: integer, minimum: 0 }
+
+    BlockState:
+      type: object
+      additionalProperties: false
+      required: [blocked]
+      properties:
+        blocked: { type: boolean }
+
+    ReportReason:
+      type: string
+      enum: [spam, harassment, inappropriate, other]
+
+    ReportRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { $ref: '#/components/schemas/ReportReason' }
+        comment: { type: string, maxLength: 500 }
+
+    Report:
+      type: object
+      additionalProperties: false
+      required: [id, reason, status, created_at]
+      properties:
+        id: { type: string, pattern: '^[0-9]+$' }
+        reason: { $ref: '#/components/schemas/ReportReason' }
+        status:
+          type: string
+          enum: [pending, resolved, rejected]
+        created_at: { type: string, format: date-time }
