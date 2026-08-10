@@ -31,6 +31,13 @@ const (
 	CodeInvalidCredentials ErrorCode = "INVALID_CREDENTIALS"
 	// CodeAccountSuspended は利用停止中（403）。
 	CodeAccountSuspended ErrorCode = "ACCOUNT_SUSPENDED"
+	// CodeCannotFollowSelf は自分自身をフォローしようとした（422）。
+	CodeCannotFollowSelf ErrorCode = "CANNOT_FOLLOW_SELF"
+	// CodeBlockedUser はブロック中の相手への操作（422）。
+	//
+	// **自分がブロックしている場合にだけ使う。** 相手が自分をブロックしている
+	// 場合にこれを返すと、ブロックされた事実が漏れる（BR-10）。
+	CodeBlockedUser ErrorCode = "BLOCKED_USER"
 	// CodeProsodyHacho は判定が破調（422）。
 	//
 	// 形式は正しく、内容が業務ルールを満たさない。400 にすると
@@ -134,6 +141,16 @@ var (
 	ErrForbidden = &Error{
 		Code:    CodeForbidden,
 		Message: "この操作は行えません",
+	}
+	// ErrCannotFollowSelf は自分自身をフォローしようとした（BR-05）。
+	ErrCannotFollowSelf = &Error{
+		Code:    CodeCannotFollowSelf,
+		Message: "自分はフォローできません",
+	}
+	// ErrBlockedUser はブロックしている相手への操作。
+	ErrBlockedUser = &Error{
+		Code:    CodeBlockedUser,
+		Message: "この相手には行えません",
 	}
 	// ErrProsodyHacho は判定が破調で投稿できない。
 	ErrProsodyHacho = &Error{
