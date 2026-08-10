@@ -41,10 +41,19 @@ func newPool(t *testing.T) *pgxpool.Pool {
 //
 // users を消せば sessions は外部キーの連鎖削除で消える。
 // **その連鎖が効いていること自体もテスト対象**であるため、
-// ここでは users だけを消す。
+// sessions は明示的に消さない。
+//
+// posts は連鎖削除されない。投稿を持つ利用者を黙って消せないようにする
+// 設計であり（posts_author_id_fkey に ON DELETE CASCADE が無い）、
+// 退会時の投稿の削除はアプリケーション側の責務である（FR-01-04）。
+// そのため posts を先に消す。
 func cleanup(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	if _, err := pool.Exec(context.Background(), `DELETE FROM users`); err != nil {
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `DELETE FROM posts`); err != nil {
+		t.Fatalf("後始末に失敗した: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM users`); err != nil {
 		t.Fatalf("後始末に失敗した: %v", err)
 	}
 }
@@ -319,4 +328,262 @@ func TestSessionRepositoryDeleteByUserIDAndExpired(t *testing.T) {
 			t.Errorf("セッションが残っている: %v", err)
 		}
 	})
+}
+
+// ---------------------------------------------------------------------------
+// 投稿
+// ---------------------------------------------------------------------------
+
+func newPost(authorID int64) *domain.Post {
+	return &domain.Post{
+		AuthorID:   authorID,
+		Body:       "今日もまた会議のための会議かな",
+		Reading:    "キョウモマタカイギノタメノカイギカナ",
+		Verdict:    domain.VerdictTeikei,
+		Break1:     5,
+		Break2:     11,
+		MoraKami:   5,
+		MoraNaka:   7,
+		MoraShimo:  5,
+		Visibility: domain.VisibilityPublic,
+		Status:     domain.PostPublished,
+	}
+}
+
+func TestPostRepositoryCreateAndFind(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	ctx := context.Background()
+
+	user, err := users.Create(ctx, newUser("poet"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	created, err := posts.Create(ctx, newPost(user.ID))
+	if err != nil {
+		t.Fatalf("投稿できない: %v", err)
+	}
+	if created.ID == 0 {
+		t.Error("ID が採番されていない")
+	}
+	if created.LikeCount != 0 {
+		t.Errorf("いいね数の既定値が 0 でない: %d", created.LikeCount)
+	}
+	if created.CreatedAt.IsZero() {
+		t.Error("作成日時が入っていない")
+	}
+
+	got, author, err := posts.FindByID(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("取得できない: %v", err)
+	}
+	if got.Body != created.Body || got.Verdict != domain.VerdictTeikei {
+		t.Errorf("取得内容が違う: %+v", got)
+	}
+	// 投稿者を1回のクエリで取れること。
+	if author.Handle != "poet" {
+		t.Errorf("投稿者が違う: %+v", author)
+	}
+	// 区切りで本文を3句に戻せること。
+	if segs := got.Segments(); segs[0] != "今日もまた" || segs[1] != "会議のための" || segs[2] != "会議かな" {
+		t.Errorf("本文を3句に戻せない: %v", segs)
+	}
+}
+
+// DB の CHECK 制約が、判定ロジックの誤りを最後に止めること。
+// アプリケーション側の検証だけに頼ると、バグでデータが汚染される。
+func TestPostRepositoryRejectsInvalidJudgement(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	ctx := context.Background()
+
+	user, err := users.Create(ctx, newUser("guard"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	tests := map[string]func(*domain.Post){
+		"上五が7モーラ":  func(p *domain.Post) { p.MoraKami = 7 },
+		"中七が5モーラ":  func(p *domain.Post) { p.MoraNaka = 5 },
+		"下五が9モーラ":  func(p *domain.Post) { p.MoraShimo = 9 },
+		"破調":       func(p *domain.Post) { p.Verdict = domain.VerdictHacho },
+		"区切りの順序が逆": func(p *domain.Post) { p.Break1, p.Break2 = 11, 5 },
+		"区切りが本文の外": func(p *domain.Post) { p.Break2 = 99 },
+		"公開範囲が不正":  func(p *domain.Post) { p.Visibility = "secret" },
+		"状態が不正":    func(p *domain.Post) { p.Status = "draft" },
+	}
+
+	for name, corrupt := range tests {
+		t.Run(name, func(t *testing.T) {
+			post := newPost(user.ID)
+			corrupt(post)
+			if _, err := posts.Create(ctx, post); err == nil {
+				t.Error("不正な投稿が保存された")
+			}
+		})
+	}
+}
+
+func TestPostRepositoryDelete(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	ctx := context.Background()
+
+	user, err := users.Create(ctx, newUser("deleter"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	created, err := posts.Create(ctx, newPost(user.ID))
+	if err != nil {
+		t.Fatalf("投稿できない: %v", err)
+	}
+
+	deletedAt := time.Now().UTC().Truncate(time.Millisecond)
+	if err := posts.Delete(ctx, created.ID, deletedAt); err != nil {
+		t.Fatalf("削除できない: %v", err)
+	}
+
+	t.Run("行は残り、状態と日時が同時に変わる", func(t *testing.T) {
+		got, _, err := posts.FindByID(ctx, created.ID)
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		if got.Status != domain.PostDeleted {
+			t.Errorf("状態が deleted でない: %v", got.Status)
+		}
+		if got.DeletedAt == nil || !got.DeletedAt.UTC().Equal(deletedAt) {
+			t.Errorf("削除日時が入っていない: %v", got.DeletedAt)
+		}
+	})
+
+	t.Run("2回目の削除は NotFound", func(t *testing.T) {
+		// 更新すると削除日時が上書きされ、いつ削除されたか分からなくなる。
+		if err := posts.Delete(ctx, created.ID, time.Now()); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("ErrNotFound を期待したが %v", err)
+		}
+	})
+}
+
+func TestPostRepositoryReturnsNotFound(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	posts := postgres.NewPostRepository(pool)
+	ctx := context.Background()
+
+	if _, _, err := posts.FindByID(ctx, 999999); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("ErrNotFound を期待したが %v", err)
+	}
+	if err := posts.Delete(ctx, 999999, time.Now()); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("ErrNotFound を期待したが %v", err)
+	}
+}
+
+// 公開範囲の判定に使うフォロー関係を引けること。
+func TestPostRepositoryIsFollowing(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	ctx := context.Background()
+
+	author, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	follower, err := users.Create(ctx, newUser("follower"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	following, err := posts.IsFollowing(ctx, follower.ID, author.ID)
+	if err != nil || following {
+		t.Errorf("フォローしていないのに true: %v %v", following, err)
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2)`,
+		follower.ID, author.ID); err != nil {
+		t.Fatalf("フォローを作れない: %v", err)
+	}
+
+	following, err = posts.IsFollowing(ctx, follower.ID, author.ID)
+	if err != nil || !following {
+		t.Errorf("フォローしているのに false: %v %v", following, err)
+	}
+	// 向きが逆のフォローを拾わないこと。
+	reverse, err := posts.IsFollowing(ctx, author.ID, follower.ID)
+	if err != nil || reverse {
+		t.Errorf("向きが逆のフォローを拾っている: %v %v", reverse, err)
+	}
+}
+
+func TestPostRepositoryIsLikedBy(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	users := postgres.NewUserRepository(pool)
+	posts := postgres.NewPostRepository(pool)
+	ctx := context.Background()
+
+	user, err := users.Create(ctx, newUser("liker"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	post, err := posts.Create(ctx, newPost(user.ID))
+	if err != nil {
+		t.Fatalf("投稿できない: %v", err)
+	}
+
+	liked, err := posts.IsLikedBy(ctx, post.ID, user.ID)
+	if err != nil || liked {
+		t.Errorf("いいねしていないのに true: %v %v", liked, err)
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO likes (user_id, post_id) VALUES ($1, $2)`, user.ID, post.ID); err != nil {
+		t.Fatalf("いいねを作れない: %v", err)
+	}
+
+	liked, err = posts.IsLikedBy(ctx, post.ID, user.ID)
+	if err != nil || !liked {
+		t.Errorf("いいねしているのに false: %v %v", liked, err)
+	}
+}
+
+// 本文の上限が DB の列定義と一致すること。
+// アプリ側の上限が大きいと、検証を通った本文が DB で 500 になる。
+func TestPostBodyColumnMatchesDomainLimit(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	var maxLength int
+	err := pool.QueryRow(context.Background(), `
+		SELECT character_maximum_length FROM information_schema.columns
+		WHERE table_name = 'posts' AND column_name = 'body'`).Scan(&maxLength)
+	if err != nil {
+		t.Fatalf("列定義を取得できない: %v", err)
+	}
+	if maxLength != domain.BodyMaxLength {
+		t.Errorf("posts.body は VARCHAR(%d) だが domain.BodyMaxLength は %d",
+			maxLength, domain.BodyMaxLength)
+	}
 }
