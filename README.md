@@ -339,6 +339,35 @@ curl -s -b /tmp/cookies -X DELETE localhost:8080/api/v1/users/bob/follow
 （[BR-10](docs/design/basic/02-domain-model.md#関係に関するルール)）。
 404 なら存在しない識別名・退会済みと区別がつきません。
 
+### タイムラインを試す
+
+```bash
+# 全体タイムライン（ログイン不要）
+curl -s "localhost:8080/api/v1/timelines/public?limit=20" | jq -c '{count: (.items|length), next_cursor}'
+# {"count":5,"next_cursor":null}
+
+# フォロー中タイムライン（ログインが必要）
+curl -s -b /tmp/cookies "localhost:8080/api/v1/timelines/home" | jq -c '.items[].author.handle'
+
+# 続きを取る（next_cursor をそのまま渡す）
+curl -s "localhost:8080/api/v1/timelines/public?limit=2&cursor=57" | jq -c '[.items[].id]'
+```
+
+`OFFSET` ではなくカーソル方式を使っています
+（[ADR-0005](docs/adr/0005-timeline-strategy.md)）。
+`OFFSET 2000` は 2000 行を読み飛ばすために 2000 行を実際に読むため、
+無限スクロールで深いページに進むほど遅くなります。
+
+| パラメータ | 説明 | 既定値 |
+| --- | --- | --- |
+| `cursor` | この ID より前を取得する | なし（最新から） |
+| `limit` | 取得件数。1〜50 | 20 |
+
+`next_cursor` が `null` なら続きはありません。
+
+**フォロー中タイムラインには、フォロー相手の `followers` 限定の投稿も含まれます。**
+全体タイムラインは `public` の投稿だけです。
+
 ### 通報・ブロックを試す
 
 ```bash
