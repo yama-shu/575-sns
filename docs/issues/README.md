@@ -197,6 +197,7 @@ flowchart LR
 | # | 種別 | タイトル | 起票済み |
 | --- | --- | --- | :---: |
 | [0014](0014-feat-follow.md) | `feat` | フォロー・アンフォローを実装する | [#34](https://github.com/yama-shu/575-sns/issues/34) |
+| [0015](0015-feat-report-and-block.md) | `feat` | 通報・ブロックを実装する | [#36](https://github.com/yama-shu/575-sns/issues/36) |
 
 ### M5 公開（起票済みのもの）
 
@@ -238,11 +239,11 @@ flowchart LR
 | 順 | 種別 | タイトル | 依存 |
 | :---: | --- | --- | --- |
 | 1 | `feat` | フォロー・アンフォローを実装する（[0014](0014-feat-follow.md) / [#34](https://github.com/yama-shu/575-sns/issues/34)） | — |
-| 2 | `feat` | 通報・ブロックを実装する | 1（BR-08 の双方向解除） |
+| 2 | `feat` | 通報・ブロックを実装する（[0015](0015-feat-report-and-block.md) / [#36](https://github.com/yama-shu/575-sns/issues/36)） | 1（BR-08 の双方向解除） |
 | 3 | `feat` | タイムライン取得（全体 / フォロー中）を実装する | 1, 2 |
 | 4 | `perf` | タイムラインの実行計画を確認しインデックスの効果を検証する | 3 |
 | 5 | `feat` | いいねを実装する（アトミックな件数更新） | — |
-| — | `feat` | フォロー中一覧・フォロワー一覧を実装する（FR-04-03） | 下記 |
+| — | `feat` | フォロー中一覧・フォロワー一覧・ブロック中一覧を実装する（FR-04-03） | 下記 |
 
 > **一覧はカーソルの設計が未決。** [基本設計 03 §5](../design/basic/03-database.md#5-カーソルページネーション)
 > のカーソル方式は `posts.id`（`BIGSERIAL`）を前提としているが、`follows` の主キーは
@@ -251,7 +252,8 @@ flowchart LR
 > 何をカーソルにするかを決めてから着手する。
 
 > **`GET /posts/:id` がブロックを考慮していない。** [#30](https://github.com/yama-shu/575-sns/issues/30)
-> の時点でブロック機能が無かったため未対応であり、BR-09 に反する。2 の Issue で対応する。
+> の時点でブロック機能が無かったため未対応であり、BR-09 に反する。
+> [#36](https://github.com/yama-shu/575-sns/issues/36) で対応する。
 
 ### M4 画面
 
