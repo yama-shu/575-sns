@@ -105,7 +105,7 @@ func (r *UserRepository) queryOne(ctx context.Context, query string, arg any) (*
 // translateUniqueViolation は一意制約違反を、利用者に返せるエラーへ変換する。
 func translateUniqueViolation(err error) error {
 	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) || pgErr.Code != "23505" {
+	if !errors.As(err, &pgErr) || pgErr.Code != codeUniqueViolation {
 		return fmt.Errorf("利用者を登録できません: %w", err)
 	}
 	switch pgErr.ConstraintName {
