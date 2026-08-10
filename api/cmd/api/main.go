@@ -85,6 +85,9 @@ func run() error {
 	)
 	authHandler := handler.NewAuth(authUsecase, cfg.SecureCookie)
 	prosodyHandler := handler.NewProsody(usecase.NewProsody(prosodyClient))
+	postHandler := handler.NewPost(usecase.NewPost(
+		postgres.NewPostRepository(pool), prosodyClient, time.Now,
+	))
 
 	e.GET("/healthz", health.Healthz)
 	e.GET("/readyz", health.Readyz)
@@ -95,6 +98,11 @@ func run() error {
 	v1.POST("/auth/logout", authHandler.LogOut)
 	v1.GET("/me", authHandler.Me, handler.RequireAuth(authUsecase))
 	v1.POST("/prosody/check", prosodyHandler.Check, handler.RequireAuth(authUsecase))
+	v1.POST("/posts", postHandler.Create, handler.RequireAuth(authUsecase))
+	// 未ログインでも取得できる。ログイン済みなら liked_by_me を返せるよう
+	// 利用者を載せる（OptionalAuth）。
+	v1.GET("/posts/:id", postHandler.Get, handler.OptionalAuth(authUsecase))
+	v1.DELETE("/posts/:id", postHandler.Delete, handler.RequireAuth(authUsecase))
 
 	address := fmt.Sprintf(":%d", cfg.Port)
 	go func() {
