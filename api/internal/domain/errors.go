@@ -31,6 +31,16 @@ const (
 	CodeInvalidCredentials ErrorCode = "INVALID_CREDENTIALS"
 	// CodeAccountSuspended は利用停止中（403）。
 	CodeAccountSuspended ErrorCode = "ACCOUNT_SUSPENDED"
+	// CodeProsodyHacho は判定が破調（422）。
+	//
+	// 形式は正しく、内容が業務ルールを満たさない。400 にすると
+	// クライアント実装のバグと利用者の入力の問題を区別できなくなる。
+	CodeProsodyHacho ErrorCode = "PROSODY_HACHO"
+	// CodeProsodyUnknownReading は読めない語がある（422）。
+	//
+	// **破調と区別する。** 読めなかっただけで「五七五になっていません」と
+	// 伝えるのは誤りであり、利用者は直しようがない。
+	CodeProsodyUnknownReading ErrorCode = "PROSODY_UNKNOWN_READING"
 	// CodeProsodyUnavailable は prosody が応答しない、
 	// またはサーキットブレーカーが開放中（503）。
 	//
@@ -61,6 +71,19 @@ type Error struct {
 	Message string
 	// Field は入力項目に対する指摘のとき、その項目名。
 	Field string
+	// Details は利用者が直すために必要な情報。
+	//
+	// 破調なら現在の音数、読めない語があるならその語。
+	// **これが無いと利用者は直しようがない。**
+	Details map[string]any
+}
+
+// WithDetails は詳細を添えた複製を返す。
+//
+// あらかじめ定義したエラーは共有されるため、複製して返す。
+// 元の値を書き換えると、別のリクエストの詳細が混ざる。
+func (e *Error) WithDetails(details map[string]any) *Error {
+	return &Error{Code: e.Code, Message: e.Message, Field: e.Field, Details: details}
 }
 
 func (e *Error) Error() string {
@@ -106,6 +129,21 @@ var (
 	ErrNotFound = &Error{
 		Code:    CodeNotFound,
 		Message: "見つかりませんでした",
+	}
+	// ErrForbidden は権限がない。
+	ErrForbidden = &Error{
+		Code:    CodeForbidden,
+		Message: "この操作は行えません",
+	}
+	// ErrProsodyHacho は判定が破調で投稿できない。
+	ErrProsodyHacho = &Error{
+		Code:    CodeProsodyHacho,
+		Message: "五七五になっていません",
+	}
+	// ErrProsodyUnknownReading は読めない語があり判定できない。
+	ErrProsodyUnknownReading = &Error{
+		Code:    CodeProsodyUnknownReading,
+		Message: "読み方が分からない語が含まれています",
 	}
 	// ErrProsodyUnavailable は判定エンジンを利用できない。
 	ErrProsodyUnavailable = &Error{
