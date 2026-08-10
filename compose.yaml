@@ -95,6 +95,27 @@ services:
     # （dirty state で再試行を重ねると復旧が難しくなる）。
     restart: "no"
 
+  # 期限切れセッションの削除（ADR-0006）。api と同じイメージを command で呼び分ける。
+  #
+  # profiles を付けているため `docker compose up` では起動しない。
+  # 手で実行する: docker compose run --rm cleanup
+  #
+  # 本番では Kubernetes の CronJob として定期実行する（M5）。
+  # **api の中でタイマーを回さない。** Pod の数だけ同じ削除が走るため。
+  cleanup:
+    profiles: ["tools"]
+    build:
+      context: ./api
+      target: runtime
+    image: 575-api:runtime
+    entrypoint: ["/cleanup"]
+    environment:
+      API_DATABASE_URL: postgres://${POSTGRES_USER:-sns575}:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/${POSTGRES_DB:-sns575}?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build:
       context: ./api

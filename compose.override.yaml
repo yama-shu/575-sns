@@ -38,6 +38,16 @@ services:
       - ./api:/app:cached
       - api-tmp:/app/tmp
 
+  cleanup:
+    build:
+      target: dev
+    image: 575-api:dev
+    # dev では go run で実行する。イメージの再ビルドが要らない。
+    entrypoint: ["go", "run", "./cmd/cleanup"]
+    volumes:
+      - ./api:/app:cached
+      - api-tmp:/app/tmp
+
   api:
     build:
       target: dev
