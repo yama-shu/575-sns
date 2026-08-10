@@ -88,6 +88,9 @@ func run() error {
 	postHandler := handler.NewPost(usecase.NewPost(
 		postgres.NewPostRepository(pool), prosodyClient, time.Now,
 	))
+	followHandler := handler.NewFollow(usecase.NewFollow(
+		postgres.NewUserRepository(pool), postgres.NewFollowRepository(pool),
+	))
 
 	e.GET("/healthz", health.Healthz)
 	e.GET("/readyz", health.Readyz)
@@ -103,6 +106,8 @@ func run() error {
 	// 利用者を載せる（OptionalAuth）。
 	v1.GET("/posts/:id", postHandler.Get, handler.OptionalAuth(authUsecase))
 	v1.DELETE("/posts/:id", postHandler.Delete, handler.RequireAuth(authUsecase))
+	v1.PUT("/users/:handle/follow", followHandler.Follow, handler.RequireAuth(authUsecase))
+	v1.DELETE("/users/:handle/follow", followHandler.Unfollow, handler.RequireAuth(authUsecase))
 
 	address := fmt.Sprintf(":%d", cfg.Port)
 	go func() {
