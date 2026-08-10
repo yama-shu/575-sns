@@ -29,14 +29,16 @@ type ErrorDetail struct {
 
 // statusOf はエラーコードに対応する HTTP ステータス（基本設計 05）。
 var statusOf = map[domain.ErrorCode]int{
-	domain.CodeValidationFailed:   http.StatusBadRequest,
-	domain.CodeUnauthenticated:    http.StatusUnauthorized,
-	domain.CodeInvalidCredentials: http.StatusUnauthorized,
-	domain.CodeForbidden:          http.StatusForbidden,
-	domain.CodeAccountSuspended:   http.StatusForbidden,
-	domain.CodeNotFound:           http.StatusNotFound,
-	domain.CodeHandleTaken:        http.StatusConflict,
-	domain.CodeEmailTaken:         http.StatusConflict,
+	domain.CodeValidationFailed:      http.StatusBadRequest,
+	domain.CodeUnauthenticated:       http.StatusUnauthorized,
+	domain.CodeInvalidCredentials:    http.StatusUnauthorized,
+	domain.CodeForbidden:             http.StatusForbidden,
+	domain.CodeAccountSuspended:      http.StatusForbidden,
+	domain.CodeNotFound:              http.StatusNotFound,
+	domain.CodeHandleTaken:           http.StatusConflict,
+	domain.CodeEmailTaken:            http.StatusConflict,
+	domain.CodeProsodyHacho:          http.StatusUnprocessableEntity,
+	domain.CodeProsodyUnknownReading: http.StatusUnprocessableEntity,
 	// 異常なエラー（詳細設計 03 §2）。
 	domain.CodeProsodyUnavailable: http.StatusServiceUnavailable,
 	domain.CodeUpstreamTimeout:    http.StatusGatewayTimeout,
@@ -68,9 +70,14 @@ func Respond(c echo.Context, err error) error {
 		if !ok {
 			status = http.StatusBadRequest
 		}
-		body := ErrorBody{Error: ErrorDetail{Code: appErr.Code, Message: appErr.Message}}
+		body := ErrorBody{Error: ErrorDetail{
+			Code: appErr.Code, Message: appErr.Message, Details: appErr.Details,
+		}}
 		if appErr.Field != "" {
-			body.Error.Details = map[string]any{"field": appErr.Field}
+			if body.Error.Details == nil {
+				body.Error.Details = map[string]any{}
+			}
+			body.Error.Details["field"] = appErr.Field
 		}
 		slog.Log(c.Request().Context(), logLevelOf(appErr.Code), "リクエストを処理できませんでした",
 			"event", "request_rejected",
