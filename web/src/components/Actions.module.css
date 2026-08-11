@@ -1,0 +1,128 @@
+/* いいね・フォロー・ブロック・削除の操作（S-03 / S-04）。 */
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* いいね。地の文と同じ大きさに収め、押せることは色と枠で示す。 */
+.like {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 2px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.like:hover {
+  border-color: var(--color-border);
+}
+
+.liked {
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+.like:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.likeSignedOut {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  text-decoration: none;
+}
+
+.relations {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.primary,
+.secondary,
+.quiet,
+.danger {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 8px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.primary {
+  border: none;
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  font-weight: 600;
+}
+
+/* フォロー中は「解除できる」ことより「フォローしている」ことを示す。 */
+.secondary {
+  border: 1px solid var(--color-accent);
+  background: transparent;
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.quiet {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-muted);
+}
+
+.danger {
+  border: 1px solid var(--color-error);
+  background: transparent;
+  color: var(--color-error);
+}
+
+.primary:disabled,
+.secondary:disabled,
+.quiet:disabled,
+.danger:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.delete {
+  font-size: 0.85rem;
+}
+
+.deleteSummary {
+  color: var(--color-muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.deleteSummary::-webkit-details-marker {
+  display: none;
+}
+
+.deleteBody {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius);
+  background: var(--color-error-bg);
+  justify-items: start;
+}
+
+.deleteWarning {
+  color: var(--color-fg);
+  font-size: 0.85rem;
+}
+
+.error {
+  color: var(--color-error);
+  font-size: 0.85rem;
+}
