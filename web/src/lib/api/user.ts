@@ -54,3 +54,18 @@ export function fetchPost(id: string) {
 export function deletePost(id: string): Promise<ApiResult<undefined>> {
   return callApi<undefined>(`/posts/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
+
+export type ProfileUpdated = components["schemas"]["ProfileUpdated"];
+
+/**
+ * プロフィールを更新する（FR-01-03）。
+ *
+ * **省略と空文字を区別する。** 触れていない項目は送らない。
+ * 空文字を送るとその項目が消える。自己紹介は消せなければならない。
+ */
+export function updateProfile(body: {
+  display_name?: string;
+  bio?: string;
+}): Promise<ApiResult<ProfileUpdated>> {
+  return callApi<ProfileUpdated>("/me/profile", { method: "PATCH", body });
+}
