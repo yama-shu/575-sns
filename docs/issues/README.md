@@ -213,6 +213,7 @@ flowchart LR
 | [0023](0023-feat-compose-screen.md) | `feat` | 投稿作成を実装する（リアルタイム判定・デバウンス） | [#52](https://github.com/yama-shu/575-sns/issues/52) |
 | [0024](0024-fix-reading-priority.md) | `fix` | 読みの解決の優先順位を直す（読めない語と数字） | [#53](https://github.com/yama-shu/575-sns/issues/53) |
 | [0025](0025-fix-screen-defects.md) | `fix` | 画面の不具合を直す（句の間隔・狭い画面のヘッダー・ハイドレーション） | [#56](https://github.com/yama-shu/575-sns/issues/56) |
+| [0026](0026-feat-user-profile-api.md) | `feat` | プロフィールとユーザーの投稿一覧を返す API を実装する | [#58](https://github.com/yama-shu/575-sns/issues/58) |
 
 ### M5 公開（起票済みのもの）
 
@@ -286,12 +287,13 @@ flowchart LR
 | 2 | `feat` | ログイン・登録画面を実装する（[0021](0021-feat-auth-screens.md) / [#48](https://github.com/yama-shu/575-sns/issues/48)） | S-08 / S-09 |
 | 3 | `feat` | タイムライン画面を実装する（無限スクロール）（[0022](0022-feat-timeline-screens.md) / [#50](https://github.com/yama-shu/575-sns/issues/50)） | S-01 / S-02 |
 | 4 | `feat` | 投稿作成を実装する（リアルタイム判定・デバウンス）（[0023](0023-feat-compose-screen.md) / [#52](https://github.com/yama-shu/575-sns/issues/52)） | S-07 |
-| 5 | `feat` | 投稿詳細・ユーザーページを実装する | S-03 / S-04 |
-| 6 | `feat` | プロフィール編集を実装する | S-10 |
-| 7 | `feat` | 通報のモーダルを実装する | S-12 |
-| 8 | `feat` | フォロー中一覧・フォロワー一覧・ブロック中一覧を実装する | S-05 / S-06 / S-11 |
-| 9 | `feat` | 運営向けの通報一覧を実装する | S-13 |
-| 10 | `test` | E2E テストで主要な導線を確認する（[詳細設計 04 §1](../design/detail/04-test-design.md)） | — |
+| 5 | `feat` | プロフィールとユーザーの投稿一覧を返す API を実装する（[0026](0026-feat-user-profile-api.md) / [#58](https://github.com/yama-shu/575-sns/issues/58)） | S-04 の前提 |
+| 6 | `feat` | 投稿詳細・ユーザーページを実装する | S-03 / S-04 |
+| 7 | `feat` | プロフィール編集を実装する | S-10 |
+| 8 | `feat` | 通報のモーダルを実装する | S-12 |
+| 9 | `feat` | フォロー中一覧・フォロワー一覧・ブロック中一覧を実装する | S-05 / S-06 / S-11 |
+| 10 | `feat` | 運営向けの通報一覧を実装する | S-13 |
+| 11 | `test` | E2E テストで主要な導線を確認する（[詳細設計 04 §1](../design/detail/04-test-design.md)） | — |
 
 > **1 を最初に行う。** [基本設計 05 §6](../design/basic/05-api.md#6-openapi-定義) は
 > 「api は定義ファイルを手で書き、web はその定義から型を生成する」としているが、
