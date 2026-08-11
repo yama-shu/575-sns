@@ -1,0 +1,79 @@
+/* 投稿カード（基本設計 04 §4）。 */
+
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space);
+  background: var(--color-bg);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.displayName {
+  font-weight: 600;
+}
+
+.handle,
+.time {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.time {
+  margin-left: auto;
+}
+
+/*
+ * 本文。句ごとに改行して表示する（FR-03-06）。
+ *
+ * 一行で表示すると五七五であることが視覚的に分からず、
+ * このサービスを使う理由が伝わらない（基本設計 04 §4）。
+ */
+.body {
+  margin: var(--space) 0;
+  padding-left: 4px;
+  font-size: 1.15rem;
+  line-height: 2;
+  display: grid;
+  gap: 2px;
+}
+
+.segment {
+  /* 空白で始まる句があるため、先頭の空白を保つ。 */
+  white-space: pre-wrap;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+.verdict {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 1px 10px;
+  font-size: 0.75rem;
+}
+
+/* 許容は字余り・字足らずを含む。定型と見分けられるようにする。 */
+.verdictKyoyo {
+  color: var(--color-muted);
+}
+
+.verdictTeikei {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.likes {
+  margin-left: auto;
+}
