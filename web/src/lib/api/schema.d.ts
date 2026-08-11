@@ -261,6 +261,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/{handle}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 利用者の識別名 */
+                handle: components["parameters"]["Handle"];
+            };
+            cookie?: never;
+        };
+        /**
+         * プロフィールを取得する
+         * @description ログインは不要。ログイン済みなら `following` と `blocking` が返る。
+         *
+         *     **見えない相手は 404 とする。** 理由を区別しない（BR-10）。
+         *     相手にブロックされている・利用停止・退会済み・存在しない識別名の
+         *     いずれも同じ応答になる。
+         *
+         *     自分がブロックした相手は**見える**。`blocking` が真になり、
+         *     投稿は0件になる（BR-09）。ブロック中一覧に行かなくても解除できるようにするため。
+         *
+         */
+        get: operations["getProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{handle}/posts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 利用者の識別名 */
+                handle: components["parameters"]["Handle"];
+            };
+            cookie?: never;
+        };
+        /**
+         * ある利用者の投稿一覧を取得する
+         * @description 新しい順に返す。ログインは不要。
+         *
+         *     **フォロワー限定の投稿は閲覧者で変わる**（FR-02-08）。
+         *     本人とフォロワーだけが見られる。それ以外と未ログインには
+         *     全体公開の投稿だけを返す。
+         *
+         *     自分がブロックした相手の投稿は0件になる（BR-09）。
+         *
+         */
+        get: operations["getUserPosts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{handle}/follow": {
         parameters: {
             query?: never;
@@ -408,6 +469,28 @@ export interface components {
             reason?: components["schemas"]["Reason"];
             /** @description `unknown` のとき、読めなかった語 */
             unreadable?: string[];
+        };
+        Profile: {
+            handle: string;
+            display_name: string;
+            bio?: string;
+            avatar_url?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** @description **閲覧者から見える投稿の数。** フォロワー限定を含めた総数を返すと、
+             *     一覧に出ている件数と合わない。閲覧者によって変わる。
+             *      */
+            post_count: number;
+            following_count: number;
+            follower_count: number;
+            /** @description 閲覧者がこの利用者をフォローしているか。未ログインなら false */
+            following: boolean;
+            /** @description 閲覧者がこの利用者をブロックしているか。未ログインなら false。
+             *
+             *     **ブロックされているかは返さない**（BR-10）。
+             *     ブロックされていれば、そもそも 404 になる。
+             *      */
+            blocking: boolean;
         };
         /** @description **判定結果を含めない。** 含めても読まない（基本設計 01 §4）。
          *      */
@@ -928,6 +1011,61 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthenticated"];
+        };
+    };
+    getProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 利用者の識別名 */
+                handle: components["parameters"]["Handle"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 取得できた */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getUserPosts: {
+        parameters: {
+            query?: {
+                /** @description この ID より前を取得する。省略すると最新から */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 取得件数 */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                /** @description 利用者の識別名 */
+                handle: components["parameters"]["Handle"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 取得できた */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            404: components["responses"]["NotFound"];
         };
     };
     follow: {

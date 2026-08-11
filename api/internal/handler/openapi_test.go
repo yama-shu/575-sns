@@ -150,6 +150,8 @@ func TestSpecCoversImplementedEndpoints(t *testing.T) {
 		"/posts/{id}/report":     {http.MethodPost},
 		"/timelines/public":      {http.MethodGet},
 		"/timelines/home":        {http.MethodGet},
+		"/users/{handle}":        {http.MethodGet},
+		"/users/{handle}/posts":  {http.MethodGet},
 		"/users/{handle}/follow": {http.MethodPut, http.MethodDelete},
 		"/users/{handle}/block":  {http.MethodPut, http.MethodDelete},
 	}
@@ -196,6 +198,23 @@ func TestResponsesConformToSpec(t *testing.T) {
 	t.Run("POST /prosody/check の 200（読めない語）", func(t *testing.T) {
 		_, body := call(t, &stubAnalyzer{result: unknownAnalysis()}, `{"body":"甃"}`)
 		assertConforms(t, doc, http.MethodPost, "/prosody/check", "200", body)
+	})
+
+	t.Run("GET /users/{handle} の 200", func(t *testing.T) {
+		_, body := callProfile(t, "/api/v1/users/yamada", "yamada",
+			usersWith(profileOwner()), &stubUserTimelineRepo{}, nil,
+			(*handler.Profile).Get)
+		assertConforms(t, doc, http.MethodGet, "/users/{handle}", "200", body)
+	})
+
+	t.Run("GET /users/{handle}/posts の 200", func(t *testing.T) {
+		timelines := &stubUserTimelineRepo{items: []domain.TimelineItem{
+			{Post: publishedPost(), Author: profileOwner()},
+		}}
+		_, body := callProfile(t, "/api/v1/users/yamada/posts", "yamada",
+			usersWith(profileOwner()), timelines, nil,
+			(*handler.Profile).Posts)
+		assertConforms(t, doc, http.MethodGet, "/users/{handle}/posts", "200", body)
 	})
 }
 
