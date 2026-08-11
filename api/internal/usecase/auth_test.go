@@ -72,6 +72,12 @@ func (r *fakeUserRepo) ExistsByEmail(_ context.Context, email string) (bool, err
 	return r.emails[email], nil
 }
 
+func (r *fakeUserRepo) UpdateProfile(
+	context.Context, int64, string, string,
+) (*domain.User, error) {
+	return nil, errors.New("使わない")
+}
+
 type fakeSessionRepo struct {
 	sessions    map[string]*domain.Session
 	users       map[int64]*domain.User

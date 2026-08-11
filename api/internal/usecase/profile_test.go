@@ -3,6 +3,7 @@ package usecase_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/yama-shu/575-sns/api/internal/domain"
@@ -313,5 +314,107 @@ func TestProfilePostsErrorPropagates(t *testing.T) {
 		TimelineQuery: domain.TimelineQuery{ViewerID: viewer(1)},
 	}); err == nil {
 		t.Fatal("エラーが伝わっていない")
+	}
+}
+
+// ----------------------------------------------------------------------
+// プロフィールの更新（FR-01-03）
+// ----------------------------------------------------------------------
+
+func strptr(s string) *string { return &s }
+
+func TestUpdateProfile(t *testing.T) {
+	me := &domain.User{ID: 1, Handle: "alice", DisplayName: "アリス", Bio: "はじめまして"}
+
+	tests := []struct {
+		name            string
+		input           usecase.UpdateProfileInput
+		wantDisplayName string
+		wantBio         string
+	}{
+		{
+			"表示名だけ変える",
+			usecase.UpdateProfileInput{DisplayName: strptr("アリス改")},
+			"アリス改", "はじめまして",
+		},
+		{
+			"自己紹介だけ変える",
+			usecase.UpdateProfileInput{Bio: strptr("五七五で暮らす")},
+			"アリス", "五七五で暮らす",
+		},
+		// **一度書いたら消せない項目は、書くこと自体をためらわせる。**
+		{
+			"自己紹介を空にする",
+			usecase.UpdateProfileInput{Bio: strptr("")},
+			"アリス", "",
+		},
+		{
+			"何も指定しない",
+			usecase.UpdateProfileInput{},
+			"アリス", "はじめまして",
+		},
+		{
+			"前後の空白は落ちる",
+			usecase.UpdateProfileInput{DisplayName: strptr("  アリス改  "), Bio: strptr("  句  ")},
+			"アリス改", "句",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newProfileFixture(me)
+
+			got, err := f.usecase.UpdateProfile(context.Background(), me, tt.input)
+			if err != nil {
+				t.Fatalf("更新できない: %v", err)
+			}
+
+			if got.DisplayName != tt.wantDisplayName {
+				t.Errorf("表示名が違う: %q, want %q", got.DisplayName, tt.wantDisplayName)
+			}
+			if got.Bio != tt.wantBio {
+				t.Errorf("自己紹介が違う: %q, want %q", got.Bio, tt.wantBio)
+			}
+		})
+	}
+}
+
+func TestUpdateProfileRejectsInvalid(t *testing.T) {
+	me := &domain.User{ID: 1, Handle: "alice", DisplayName: "アリス"}
+
+	tests := []struct {
+		name  string
+		input usecase.UpdateProfileInput
+		field string
+	}{
+		{"表示名を空にする", usecase.UpdateProfileInput{DisplayName: strptr("")}, "display_name"},
+		{"表示名が空白だけ", usecase.UpdateProfileInput{DisplayName: strptr("   ")}, "display_name"},
+		{
+			"表示名が長すぎる",
+			usecase.UpdateProfileInput{DisplayName: strptr(strings.Repeat("あ", 51))},
+			"display_name",
+		},
+		{
+			"自己紹介が長すぎる",
+			usecase.UpdateProfileInput{Bio: strptr(strings.Repeat("あ", 201))},
+			"bio",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newProfileFixture(me)
+
+			_, err := f.usecase.UpdateProfile(context.Background(), me, tt.input)
+
+			var validation *domain.Error
+			if !errors.As(err, &validation) || validation.Code != domain.CodeValidationFailed {
+				t.Fatalf("検証エラーにならない: %v", err)
+			}
+			if validation.Field != tt.field {
+				t.Errorf("項目が違う: %q, want %s", validation.Field, tt.field)
+			}
+			if f.users.updated {
+				t.Error("検証に失敗したのに保存している")
+			}
+		})
 	}
 }

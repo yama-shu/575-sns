@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,6 +41,14 @@ func (s *stubUserRepo) FindByHandle(_ context.Context, handle string) (*domain.U
 }
 func (s *stubUserRepo) ExistsByEmail(context.Context, string) (bool, error) {
 	return false, errors.New("使わない")
+}
+func (s *stubUserRepo) UpdateProfile(
+	_ context.Context, _ int64, displayName, bio string,
+) (*domain.User, error) {
+	updated := *profileOwner()
+	updated.DisplayName = displayName
+	updated.Bio = bio
+	return &updated, nil
 }
 
 // stubProfileRepo は数え上げの偽物。
@@ -257,6 +266,94 @@ func TestProfileRequiresHandle(t *testing.T) {
 
 			if status != http.StatusBadRequest {
 				t.Fatalf("status=%d body=%v", status, body)
+			}
+		})
+	}
+}
+
+// ----------------------------------------------------------------------
+// プロフィールの更新（FR-01-03）
+// ----------------------------------------------------------------------
+
+// callUpdateProfile は PATCH /api/v1/me/profile を1回呼ぶ。
+func callUpdateProfile(
+	t *testing.T, body string, user *domain.User, users *stubUserRepo,
+) (int, map[string]any) {
+	t.Helper()
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/me/profile", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	if user != nil {
+		handler.SetCurrentUserForTest(c, user)
+	}
+
+	h := handler.NewProfile(usecase.NewProfile(
+		users, stubProfileRepo{}, &stubUserTimelineRepo{}, stubFollowRepo{}, stubBlockRepo{},
+	))
+	if err := h.UpdateProfile(c); err != nil {
+		t.Fatalf("ハンドラがエラーを返した: %v", err)
+	}
+	var decoded map[string]any
+	if rec.Body.Len() > 0 {
+		if err := json.Unmarshal(rec.Body.Bytes(), &decoded); err != nil {
+			t.Fatalf("応答を解釈できない: %v (body=%s)", err, rec.Body.String())
+		}
+	}
+	return rec.Code, decoded
+}
+
+func TestUpdateProfileResponds200(t *testing.T) {
+	owner := profileOwner()
+	status, body := callUpdateProfile(t,
+		`{"display_name":"やまだ改","bio":"五七五で暮らす"}`, owner, usersWith(owner))
+
+	if status != http.StatusOK {
+		t.Fatalf("status=%d body=%v", status, body)
+	}
+	if body["display_name"] != "やまだ改" || body["bio"] != "五七五で暮らす" {
+		t.Errorf("更新後の値が返らない: %v", body)
+	}
+}
+
+// **省略と空文字を区別する。** 区別できないと自己紹介を消せない。
+func TestUpdateProfileDistinguishesOmittedFromEmpty(t *testing.T) {
+	owner := profileOwner()
+
+	_, cleared := callUpdateProfile(t, `{"bio":""}`, owner, usersWith(owner))
+	if cleared["bio"] != "" {
+		t.Errorf("空文字で消えない: %v", cleared["bio"])
+	}
+	if cleared["display_name"] != owner.DisplayName {
+		t.Errorf("触れていない表示名が変わった: %v", cleared["display_name"])
+	}
+
+	_, untouched := callUpdateProfile(t, `{"display_name":"やまだ改"}`, owner, usersWith(owner))
+	if untouched["bio"] != owner.Bio {
+		t.Errorf("触れていない自己紹介が変わった: %v", untouched["bio"])
+	}
+}
+
+func TestUpdateProfileRejects(t *testing.T) {
+	owner := profileOwner()
+
+	tests := []struct {
+		name string
+		body string
+		user *domain.User
+		want int
+	}{
+		{"表示名を空にする", `{"display_name":""}`, owner, http.StatusBadRequest},
+		{"形式が不正", `{`, owner, http.StatusBadRequest},
+		{"未ログイン", `{"bio":"x"}`, nil, http.StatusUnauthorized},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, body := callUpdateProfile(t, tt.body, tt.user, usersWith(owner))
+			if status != tt.want {
+				t.Fatalf("status=%d, want %d body=%v", status, tt.want, body)
 			}
 		})
 	}

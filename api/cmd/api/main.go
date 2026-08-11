@@ -120,6 +120,7 @@ func run() error {
 	v1.POST("/auth/login", authHandler.LogIn)
 	v1.POST("/auth/logout", authHandler.LogOut)
 	v1.GET("/me", authHandler.Me, handler.RequireAuth(authUsecase))
+	v1.PATCH("/me/profile", profileHandler.UpdateProfile, handler.RequireAuth(authUsecase))
 	v1.POST("/prosody/check", prosodyHandler.Check, handler.RequireAuth(authUsecase))
 	v1.POST("/posts", postHandler.Create, handler.RequireAuth(authUsecase))
 	// 未ログインでも取得できる。ログイン済みなら liked_by_me を返せるよう
