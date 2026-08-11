@@ -1,0 +1,104 @@
+/*
+ * 画面の骨格。
+ *
+ * NFR-06-01 に従いスマートフォンを主とする。
+ *   〜768px : 単一カラム。ナビゲーションは画面下部に固定
+ *   769px〜 : 2カラム。左にナビゲーション、右にコンテンツ
+ */
+
+.shell {
+  min-height: 100dvh;
+}
+
+.main {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: var(--space);
+  /* 下部に固定したナビゲーションと重ならないようにする。 */
+  padding-bottom: calc(var(--space) + 72px);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space);
+  margin-bottom: var(--space);
+}
+
+.title {
+  font-size: 1.35rem;
+  margin: 0;
+}
+
+.account {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logout {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.nav {
+  position: fixed;
+  inset: auto 0 0 0;
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px;
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-border);
+}
+
+.navItem {
+  padding: 8px 18px;
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+}
+
+.navItemActive {
+  color: var(--color-fg);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+@media (min-width: 769px) {
+  .shell {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: var(--space);
+    max-width: calc(var(--content-width) + 220px);
+    margin: 0 auto;
+  }
+
+  .main {
+    padding-bottom: var(--space);
+    margin: 0;
+  }
+
+  .nav {
+    position: sticky;
+    top: 0;
+    inset: auto;
+    height: 100dvh;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    border-top: none;
+    border-right: 1px solid var(--color-border);
+    padding: var(--space) 8px;
+  }
+}
