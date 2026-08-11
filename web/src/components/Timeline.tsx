@@ -16,21 +16,30 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 
 import { PostCard } from "./PostCard";
-import { loadMore } from "@/lib/timeline-actions";
+import { loadMore, type TimelineKind } from "@/lib/timeline-actions";
 import type { Post } from "@/lib/api/timeline";
 
 import styles from "./Timeline.module.css";
 
 type Props = {
-  kind: "public" | "home";
+  kind: TimelineKind;
   initialPosts: Post[];
   initialCursor: string | null;
   /** 続きへのリンク先。JavaScript が無い環境で使う。 */
   moreHref: string;
   empty: { title: string; hint: React.ReactNode };
+  /** ログインしているか。いいねを押せるかの判断に使う。 */
+  signedIn: boolean;
 };
 
-export function Timeline({ kind, initialPosts, initialCursor, moreHref, empty }: Props) {
+export function Timeline({
+  kind,
+  initialPosts,
+  initialCursor,
+  moreHref,
+  empty,
+  signedIn,
+}: Props) {
   const [posts, setPosts] = useState(initialPosts);
   const [cursor, setCursor] = useState(initialCursor);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -74,7 +83,7 @@ export function Timeline({ kind, initialPosts, initialCursor, moreHref, empty }:
     <>
       <div className={styles.list}>
         {posts.map((post) => (
-          <PostCard key={post.id} post={post} />
+          <PostCard key={post.id} post={post} signedIn={signedIn} />
         ))}
       </div>
 

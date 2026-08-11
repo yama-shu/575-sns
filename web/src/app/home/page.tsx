@@ -36,6 +36,7 @@ export default async function HomeTimelinePage({ searchParams }: PageProps<"/hom
         kind="home"
         initialPosts={timeline.data.items}
         initialCursor={timeline.data.next_cursor}
+        signedIn={user !== null}
         moreHref="/home"
         empty={{
           title: "フォロー中の一句はまだありません",
