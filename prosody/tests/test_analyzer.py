@@ -212,3 +212,66 @@ def test_TC_LM_02_助数詞の連濁に対応しない(analyzer: ProsodyAnalyzer
     assert result.reading is not None
     # 現状の読みを固定する。イッポン と読めていれば改善している。
     assert result.reading != "", "読みが取得できなくなったら退行"
+
+
+# ----------------------------------------------------------------------
+# 読みの解決の優先順位（#53）
+#
+# **モックした解析器では検出できなかった不具合の再発防止。**
+# SudachiPy は読みを付けられなかった語に表層をそのまま返し、
+# 数字には1桁ずつの読みを付ける。どちらもモックでは再現しない。
+# ----------------------------------------------------------------------
+
+
+def test_読めない語は表層を読みとして採用しない(analyzer: ProsodyAnalyzer) -> None:
+    """SudachiPy は `彁` の読みとして `彁` を返す。
+
+    これを読みとして扱うと、表層の文字数がモーラ数に化け、
+    `unknown` にも到達しない。正しく詠んだ利用者に
+    「五七五になっていません」と伝えることになる。
+    """
+    result = analyzer.analyze("彁")
+
+    assert result.verdict is Verdict.UNKNOWN
+    assert result.reason is Reason.READING_UNAVAILABLE
+    assert result.unreadable == ["彁"]
+    assert result.reading is None
+
+
+def test_読めない語が混じると全体が判定不能になる(analyzer: ProsodyAnalyzer) -> None:
+    """読める語だけで数えて破調と答えてはならない。"""
+    result = analyzer.analyze("彁を見つめる春の夜に")
+
+    assert result.verdict is Verdict.UNKNOWN
+    assert result.unreadable == ["彁"]
+
+
+def test_数字は数値読みで数えられる(analyzer: ProsodyAnalyzer) -> None:
+    """詳細設計 01 §4 の数値読み変換。
+
+    解析器の読み（`ニレイニヨン`）より優先する。
+    """
+    result = analyzer.analyze("2024")
+
+    assert result.reading == "ニセンニジュウヨン"
+    assert result.total_mora == 8
+
+
+def test_十は2モーラとして数えられる(analyzer: ProsodyAnalyzer) -> None:
+    """`イチレイ`（4モーラ）と読まれていた。"""
+    result = analyzer.analyze("10")
+
+    assert result.reading == "ジュウ"
+    assert result.total_mora == 2
+
+
+def test_ASCII以外の数字も数値として読まれる(analyzer: ProsodyAnalyzer) -> None:
+    """挙動の記録。`str.isdecimal()` は Unicode の十進数字すべてに真を返す。
+
+    タミル数字 `௧௨௩` は `int()` で 123 になり、`ヒャクニジュウサン` と読まれる。
+    数としては正しいが、日本語話者がそう読むとは限らない。
+    意図せず変わったときに気づくためにここで固定する。
+    """
+    result = analyzer.analyze("௧௨௩")
+
+    assert result.reading == "ヒャクニジュウサン"
