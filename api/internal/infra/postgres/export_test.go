@@ -8,4 +8,6 @@ package postgres
 const (
 	PublicTimelineQueryForTest = publicTimelineQuery
 	HomeTimelineQueryForTest   = homeTimelineQuery
+	UserPostsQueryForTest      = userPostsQuery
+	ProfileCountsQueryForTest  = profileCountsQuery
 )
