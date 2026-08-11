@@ -212,6 +212,7 @@ flowchart LR
 | [0022](0022-feat-timeline-screens.md) | `feat` | タイムライン画面を実装する（無限スクロール） | [#50](https://github.com/yama-shu/575-sns/issues/50) |
 | [0023](0023-feat-compose-screen.md) | `feat` | 投稿作成を実装する（リアルタイム判定・デバウンス） | [#52](https://github.com/yama-shu/575-sns/issues/52) |
 | [0024](0024-fix-reading-priority.md) | `fix` | 読みの解決の優先順位を直す（読めない語と数字） | [#53](https://github.com/yama-shu/575-sns/issues/53) |
+| [0025](0025-fix-screen-defects.md) | `fix` | 画面の不具合を直す（句の間隔・狭い画面のヘッダー・ハイドレーション） | [#56](https://github.com/yama-shu/575-sns/issues/56) |
 
 ### M5 公開（起票済みのもの）
 
