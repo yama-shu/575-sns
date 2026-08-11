@@ -1,46 +1,51 @@
 /**
- * S-02 フォロー中タイムライン（/home）。
- *
- * **本 Issue では遷移先として最小限にとどめる。** 画面遷移図はログイン成功後の
- * 遷移先を /home としており、遷移先を変えると設計と食い違う（#48）。
- * タイムラインの中身は次の Issue で実装する。
+ * S-02 フォロー中タイムライン（基本設計 04 §1）。
  */
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AppShell } from "@/components/AppShell";
+import { Timeline } from "@/components/Timeline";
 import { currentUser } from "@/lib/api/session";
-import { logOut } from "@/lib/auth-actions";
-
-import styles from "./page.module.css";
+import { fetchTimeline } from "@/lib/api/timeline";
 
 export const metadata = { title: "フォロー中 | 575" };
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+export default async function HomeTimelinePage({ searchParams }: PageProps<"/home">) {
   const user = await currentUser();
   // 未ログイン、またはセッション切れ。画面遷移図の「セッション切れ → S-08」。
   if (!user) redirect("/login");
 
-  return (
-    <main className={styles.screen}>
-      <header className={styles.header}>
-        <h1 className={styles.brand}>575</h1>
-        <div className={styles.account}>
-          <span>
-            {user.display_name} <span className={styles.handle}>@{user.handle}</span>
-          </span>
-          {/* form + button で組み、キーボードだけで操作できるようにする。 */}
-          <form action={logOut}>
-            <button className={styles.logout} type="submit">
-              ログアウト
-            </button>
-          </form>
-        </div>
-      </header>
+  const params = await searchParams;
+  const cursor = typeof params.cursor === "string" ? params.cursor : undefined;
+  const timeline = await fetchTimeline("home", cursor);
 
-      <p className={styles.placeholder}>
-        フォロー中タイムラインは次の Issue で実装します。
-      </p>
-    </main>
+  if (!timeline.ok) {
+    return (
+      <AppShell title="フォロー中" user={user} current="/home">
+        <p role="alert">タイムラインを読み込めませんでした。時間をおいてお試しください。</p>
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell title="フォロー中" user={user} current="/home">
+      <Timeline
+        kind="home"
+        initialPosts={timeline.data.items}
+        initialCursor={timeline.data.next_cursor}
+        moreHref="/home"
+        empty={{
+          title: "フォロー中の一句はまだありません",
+          hint: (
+            <>
+              <Link href="/">全体タイムライン</Link>で気になる人を見つけてみてください。
+            </>
+          ),
+        }}
+      />
+    </AppShell>
   );
 }
