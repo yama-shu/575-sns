@@ -210,6 +210,7 @@ flowchart LR
 | [0020](0020-infra-api-openapi.md) | `infra` | api の OpenAPI 定義を作り、web の型を生成する | [#46](https://github.com/yama-shu/575-sns/issues/46) |
 | [0021](0021-feat-auth-screens.md) | `feat` | ログイン・登録画面を実装する | [#48](https://github.com/yama-shu/575-sns/issues/48) |
 | [0022](0022-feat-timeline-screens.md) | `feat` | タイムライン画面を実装する（無限スクロール） | [#50](https://github.com/yama-shu/575-sns/issues/50) |
+| [0024](0024-fix-reading-priority.md) | `fix` | 読みの解決の優先順位を直す（読めない語と数字） | [#53](https://github.com/yama-shu/575-sns/issues/53) |
 
 ### M5 公開（起票済みのもの）
 
