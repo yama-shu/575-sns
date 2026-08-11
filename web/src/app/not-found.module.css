@@ -1,0 +1,40 @@
+/* 見つからなかったときの画面。 */
+
+.screen {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: var(--space);
+  text-align: center;
+}
+
+.code {
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--color-border);
+  letter-spacing: 0.1em;
+}
+
+.title {
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.hint {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  max-width: 32ch;
+}
+
+.back {
+  margin-top: 8px;
+  font-size: 0.9rem;
+  padding: 10px 24px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  text-decoration: none;
+  font-weight: 600;
+}
