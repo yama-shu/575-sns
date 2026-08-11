@@ -216,6 +216,7 @@ flowchart LR
 | [0026](0026-feat-user-profile-api.md) | `feat` | プロフィールとユーザーの投稿一覧を返す API を実装する | [#58](https://github.com/yama-shu/575-sns/issues/58) |
 | [0027](0027-feat-post-and-user-pages.md) | `feat` | 投稿詳細とユーザーページを実装する | [#60](https://github.com/yama-shu/575-sns/issues/60) |
 | [0028](0028-feat-profile-edit.md) | `feat` | プロフィール編集を実装する | [#62](https://github.com/yama-shu/575-sns/issues/62) |
+| [0029](0029-feat-report-modal.md) | `feat` | 通報のモーダルを実装する | [#64](https://github.com/yama-shu/575-sns/issues/64) |
 
 ### M5 公開（起票済みのもの）
 
@@ -292,7 +293,7 @@ flowchart LR
 | 5 | `feat` | プロフィールとユーザーの投稿一覧を返す API を実装する（[0026](0026-feat-user-profile-api.md) / [#58](https://github.com/yama-shu/575-sns/issues/58)） | S-04 の前提 |
 | 6 | `feat` | 投稿詳細・ユーザーページを実装する（[0027](0027-feat-post-and-user-pages.md) / [#60](https://github.com/yama-shu/575-sns/issues/60)） | S-03 / S-04 |
 | 7 | `feat` | プロフィール編集を実装する（[0028](0028-feat-profile-edit.md) / [#62](https://github.com/yama-shu/575-sns/issues/62)） | S-10 |
-| 8 | `feat` | 通報のモーダルを実装する | S-12 |
+| 8 | `feat` | 通報のモーダルを実装する（[0029](0029-feat-report-modal.md) / [#64](https://github.com/yama-shu/575-sns/issues/64)） | S-12 |
 | 9 | `feat` | フォロー中一覧・フォロワー一覧・ブロック中一覧を実装する | S-05 / S-06 / S-11 |
 | 10 | `feat` | 運営向けの通報一覧を実装する | S-13 |
 | 11 | `test` | E2E テストで主要な導線を確認する（[詳細設計 04 §1](../design/detail/04-test-design.md)） | — |
