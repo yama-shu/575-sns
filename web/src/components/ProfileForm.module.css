@@ -1,0 +1,80 @@
+/* プロフィール編集フォーム（S-10）。 */
+
+.form {
+  display: grid;
+  gap: var(--space);
+  max-width: 480px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.input,
+.textarea {
+  font: inherit;
+  /* iOS で入力時に画面が拡大されるのを防ぐ（16px 未満だと拡大される）。 */
+  font-size: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.invalid {
+  border-color: var(--color-error);
+}
+
+.count {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  text-align: right;
+}
+
+.hint {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.fixed {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+.error {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+
+.submit {
+  font: inherit;
+  font-weight: 600;
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  cursor: pointer;
+  justify-self: start;
+  padding-inline: 32px;
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
