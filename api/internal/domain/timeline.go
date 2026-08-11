@@ -52,6 +52,21 @@ func (q TimelineQuery) EffectiveLimit() int {
 	return *q.Limit
 }
 
+// UserPostQuery はユーザーページの投稿一覧の取得条件。
+//
+// タイムラインと同じ形で読むため、TimelineQuery を含む。
+type UserPostQuery struct {
+	TimelineQuery
+	// AuthorID は誰の投稿を取るか。
+	AuthorID int64
+	// IncludeFollowersOnly はフォロワー限定の投稿を含めるか。
+	//
+	// 本人とフォロワーだけが true になる（FR-02-08）。
+	// **この判断を SQL でやらない。** 「見えるか」の規則は usecase が持つ
+	// （Post.IsVisibleTo と同じ規則を2箇所に書かない）。
+	IncludeFollowersOnly bool
+}
+
 // TimelineItem はタイムラインの1件。
 //
 // 投稿・投稿者・閲覧者から見た状態を1回のクエリでまとめて取る。
@@ -78,4 +93,10 @@ type TimelineRepository interface {
 	// フォローしている相手の followers 限定の投稿も含む。
 	// ViewerID は必須である。
 	Home(ctx context.Context, q TimelineQuery) ([]TimelineItem, error)
+	// UserPosts はある利用者の投稿一覧を返す（S-04）。
+	//
+	// ブロックの除外を条件に入れない。**プロフィールを引く時点で 404 になる**ため、
+	// ここに到達する時点でブロック関係は無い。二重に書くと、
+	// 片方だけ直したときに食い違う。
+	UserPosts(ctx context.Context, q UserPostQuery) ([]TimelineItem, error)
 }
