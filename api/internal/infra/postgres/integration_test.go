@@ -2242,3 +2242,73 @@ func TestUserPostsPaginate(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// プロフィールの更新（S-10）
+// ---------------------------------------------------------------------------
+
+func TestUserRepositoryUpdateProfile(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	user, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	updated, err := users.UpdateProfile(ctx, user.ID, "やまだ改", "五七五で暮らす")
+	if err != nil {
+		t.Fatalf("更新できない: %v", err)
+	}
+	if updated.DisplayName != "やまだ改" || updated.Bio != "五七五で暮らす" {
+		t.Fatalf("更新後の値が違う: %+v", updated)
+	}
+	if updated.Handle != user.Handle {
+		t.Errorf("識別名が変わっている: %s", updated.Handle)
+	}
+
+	// **空にできること。** 一度書いたら消せない項目は、書くことをためらわせる。
+	cleared, err := users.UpdateProfile(ctx, user.ID, "やまだ改", "")
+	if err != nil {
+		t.Fatalf("更新できない: %v", err)
+	}
+	if cleared.Bio != "" {
+		t.Errorf("自己紹介を消せない: %q", cleared.Bio)
+	}
+
+	// 読み直しても残っていること。
+	again, err := users.FindByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("引けない: %v", err)
+	}
+	if again.DisplayName != "やまだ改" || again.Bio != "" {
+		t.Errorf("保存されていない: %+v", again)
+	}
+}
+
+// 利用停止・退会済みは更新させないこと。
+func TestUserRepositoryUpdateProfileRejectsInactive(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	user, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE users SET status = 'suspended' WHERE id = $1`, user.ID); err != nil {
+		t.Fatalf("状態を変えられない: %v", err)
+	}
+
+	_, err = users.UpdateProfile(ctx, user.ID, "やまだ改", "")
+
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("404 にならない: %v", err)
+	}
+}
