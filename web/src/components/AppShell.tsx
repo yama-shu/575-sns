@@ -7,6 +7,7 @@
  */
 import Link from "next/link";
 
+import { ComposeButton } from "./ComposeButton";
 import { logOut } from "@/lib/auth-actions";
 import type { User } from "@/lib/api/session";
 
@@ -52,6 +53,8 @@ export function AppShell({ title, user, current, children }: Props) {
               <Link href="/login">ログイン</Link>
             ) : (
               <>
+                {/* 未ログインでは出さない。詠むにはログインが要る（S-07）。 */}
+                <ComposeButton />
                 <span>@{user.handle}</span>
                 <form action={logOut}>
                   <button className={styles.logout} type="submit">
