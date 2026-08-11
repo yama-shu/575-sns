@@ -86,6 +86,27 @@ class ResolvedReading:
         return not self.unreadable
 
 
+# カタカナの Unicode ブロック（U+30A0〜U+30FF）。
+#
+# 長音符「ー」（U+30FC）と中黒「・」（U+30FB）を含む。
+# 読みに現れうる文字はこの範囲に収まる。
+_KATAKANA_BLOCK: Final = (0x30A0, 0x30FF)
+
+
+def is_katakana_reading(reading: str | None) -> bool:
+    """解析器が返した文字列を、読みとして採用してよいか。
+
+    **「空でないこと」では判定できない。** SudachiPy は読みを付けられなかった語に
+    対し、表層をそのまま読みとして返す（`彁` → `彁`）。
+    これを読みとして扱うと、表層の文字数がモーラ数に化ける。
+
+    すべての文字がカタカナであることを条件にする。
+    """
+    if not reading:
+        return False
+    return all(_KATAKANA_BLOCK[0] <= ord(ch) <= _KATAKANA_BLOCK[1] for ch in reading)
+
+
 def read_latin(surface: str) -> str:
     """ラテン文字をアルファベット読みにする。
 
@@ -155,13 +176,29 @@ class ReadingResolver:
         if all(is_ignorable(ch) for ch in surface):
             return ""
 
-        # 解析器が読みを返したならそれを使う
-        if token.reading:
-            return token.reading
-
-        # 数字 → 数値読み
+        # 数字 → 数値読み。
+        #
+        # **解析器の読みより先に行う。** SudachiPy は数字にも読みを付けるが、
+        # 1桁ずつ読む。後段に置くと数値読み変換に到達しない。
+        #
+        #     10 → イチレイ   300 → サンレイレイ   2024 → ニレイニヨン
+        #
+        # 「10」を「イチレイ」と読むのは誤りであり、モーラ数も合わない
+        # （詳細設計 01 §4 の数値読み変換）。
         if surface.isdecimal():
             return numbers.read(surface)
+
+        # 解析器が読みを返したならそれを使う。
+        #
+        # **カタカナであることを確かめる。** SudachiPy は読みを付けられなかった語に
+        # 対して、表層をそのまま読みとして返す。
+        #
+        #     彁 → 彁   龘 → 龘   ௧௨௩ → ௧௨௩
+        #
+        # 「読みが空か」で判定すると、これらを読めたものとして扱ってしまい、
+        # 表層の文字数がそのままモーラ数に化ける。unknown にも到達しない。
+        if is_katakana_reading(token.reading):
+            return token.reading
 
         # ラテン文字 → アルファベット読み
         latin = read_latin(surface)

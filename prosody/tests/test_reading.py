@@ -6,7 +6,7 @@
 
 import pytest
 
-from prosody.reading import ReadingResolver, read_latin
+from prosody.reading import ReadingResolver, is_katakana_reading, read_latin
 from prosody.token import PartOfSpeech, Token
 
 resolver = ReadingResolver()
@@ -174,3 +174,56 @@ def test_形態素が無ければ空の結果になる() -> None:
     assert resolved.reading == ""
     assert resolved.total_mora == 0
     assert resolved.is_readable is True
+
+
+# ----------------------------------------------------------------------
+# 読みとして採用してよいかの判定（#53）
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "reading",
+    ["キョウ", "コンピューター", "ア", "ヴ", "・"],
+    ids=["普通の読み", "長音符", "1文字", "濁点付き", "中黒"],
+)
+def test_カタカナだけの文字列は読みとして採用する(reading: str) -> None:
+    assert is_katakana_reading(reading) is True
+
+
+@pytest.mark.parametrize(
+    "reading",
+    [None, "", "彁", "龘", "௧௨௩", "きょう", "AI", "2024", "彁ノエ"],
+    ids=[
+        "None",
+        "空",
+        "読めない漢字",
+        "読めない漢字2",
+        "タミル数字",
+        "ひらがな",
+        "ラテン文字",
+        "数字",
+        "一部だけカタカナ",
+    ],
+)
+def test_カタカナ以外を含む文字列は読みとして採用しない(reading: str | None) -> None:
+    """SudachiPy は読みを付けられなかった語に表層をそのまま返す。
+
+    「空でないこと」を条件にすると、これらを読めたものとして扱ってしまう。
+    """
+    assert is_katakana_reading(reading) is False
+
+
+def test_解析器が表層を返しても読めない語として扱う() -> None:
+    """`_resolve_one` の優先順位そのものの確認。"""
+    resolved = resolver.resolve([token("彁", "彁")])
+
+    assert resolved.is_readable is False
+    assert resolved.unreadable == ["彁"]
+
+
+def test_解析器が読みを返しても数字は数値読みを優先する() -> None:
+    """SudachiPy は `2024` に `ニレイニヨン` を返す。"""
+    resolved = resolver.resolve([token("2024", "ニレイニヨン")])
+
+    assert resolved.reading == "ニセンニジュウヨン"
+    assert resolved.total_mora == 8
