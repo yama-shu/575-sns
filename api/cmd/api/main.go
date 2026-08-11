@@ -104,6 +104,13 @@ func run() error {
 	followHandler := handler.NewFollow(usecase.NewFollow(
 		postgres.NewUserRepository(pool), postgres.NewFollowRepository(pool),
 	))
+	profileHandler := handler.NewProfile(usecase.NewProfile(
+		postgres.NewUserRepository(pool),
+		postgres.NewProfileRepository(pool),
+		postgres.NewTimelineRepository(pool),
+		postgres.NewFollowRepository(pool),
+		blockRepo,
+	))
 
 	e.GET("/healthz", health.Healthz)
 	e.GET("/readyz", health.Readyz)
@@ -119,6 +126,10 @@ func run() error {
 	// 利用者を載せる（OptionalAuth）。
 	v1.GET("/posts/:id", postHandler.Get, handler.OptionalAuth(authUsecase))
 	v1.DELETE("/posts/:id", postHandler.Delete, handler.RequireAuth(authUsecase))
+	// プロフィールと投稿一覧は未ログインでも見られる。ログイン済みなら
+	// フォロー中・ブロック中の状態と liked_by_me が返るよう、利用者を載せる。
+	v1.GET("/users/:handle", profileHandler.Get, handler.OptionalAuth(authUsecase))
+	v1.GET("/users/:handle/posts", profileHandler.Posts, handler.OptionalAuth(authUsecase))
 	v1.PUT("/users/:handle/follow", followHandler.Follow, handler.RequireAuth(authUsecase))
 	v1.DELETE("/users/:handle/follow", followHandler.Unfollow, handler.RequireAuth(authUsecase))
 	v1.POST("/posts/:id/report", moderationHandler.Report, handler.RequireAuth(authUsecase))
