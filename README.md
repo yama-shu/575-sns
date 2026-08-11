@@ -249,6 +249,22 @@ curl -s -X POST localhost:8000/v1/analyze \
 # {"verdict":"hacho","reason":"TOO_FEW_MORA","total_mora":7}
 ```
 
+### 画面を見る
+
+http://localhost:3000 を開きます。M4 で実装した画面は以下です。
+
+| パス | 画面 | 未ログイン |
+| --- | --- | --- |
+| `/login` | S-08 ログイン | ✅ |
+| `/signup` | S-09 アカウント登録 | ✅ |
+| `/home` | S-02 フォロー中タイムライン | ❌ `/login` へ移動 |
+
+**ブラウザは web としか通信しません。** api への中継は web のサーバー側が行い、
+利用者の Cookie を転送します（[基本設計 01 §6](docs/design/basic/01-architecture.md#6-サービス間通信)）。
+ブラウザから `localhost:8080` を直接呼ぶ作りにはしていません。
+
+`/` は開発環境の疎通確認ページのままです（S-01 全体タイムラインは次の Issue で実装します）。
+
 ### 認証を試す
 
 ```bash
