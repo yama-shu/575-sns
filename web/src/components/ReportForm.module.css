@@ -1,0 +1,140 @@
+/* 通報（S-12）。 */
+
+.trigger {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.dialog {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  padding: 0;
+  width: min(480px, calc(100vw - 2 * var(--space)));
+  max-height: calc(100dvh - 2 * var(--space));
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.content {
+  padding: var(--space);
+  display: grid;
+  gap: var(--space);
+}
+
+.title {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.form {
+  display: grid;
+  gap: var(--space);
+}
+
+.reasons {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 0;
+}
+
+.legend {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding-inline: 4px;
+}
+
+.reason {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.textarea {
+  font: inherit;
+  /* iOS で入力時に画面が拡大されるのを防ぐ（16px 未満だと拡大される）。 */
+  font-size: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  resize: vertical;
+}
+
+.error {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.cancel,
+.close {
+  font: inherit;
+  padding: 10px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  cursor: pointer;
+}
+
+.submit {
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 24px;
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-error);
+  cursor: pointer;
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* 受け付けたあと。閉じるのは利用者に任せる。 */
+.done {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.doneTitle {
+  font-weight: 600;
+}
+
+.doneHint {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
