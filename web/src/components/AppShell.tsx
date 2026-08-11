@@ -13,10 +13,18 @@ import type { User } from "@/lib/api/session";
 
 import styles from "./AppShell.module.css";
 
-/** ナビゲーションの項目。追加は1行で済む。 */
-const NAV_ITEMS: { href: string; label: string; requiresAuth: boolean }[] = [
+/**
+ * ナビゲーションの項目。追加は1行で済む。
+ *
+ * 基本設計 04 §2 が「すべての画面から S-01 / S-02 / S-04（自分）/ S-10 へ
+ * 遷移できる」としている。自分のページは識別名が要るため、
+ * `href` を利用者から組み立てる。
+ */
+const NAV_ITEMS: { href: string | ((handle: string) => string); label: string; requiresAuth: boolean }[] = [
   { href: "/", label: "全体", requiresAuth: false },
   { href: "/home", label: "フォロー中", requiresAuth: true },
+  { href: (handle) => `/@${handle}`, label: "自分の句", requiresAuth: true },
+  { href: "/settings/profile", label: "設定", requiresAuth: true },
 ];
 
 type Props = {
@@ -28,7 +36,10 @@ type Props = {
 };
 
 export function AppShell({ title, user, current, children }: Props) {
-  const items = NAV_ITEMS.filter((item) => !item.requiresAuth || user !== null);
+  const items = NAV_ITEMS.filter((item) => !item.requiresAuth || user !== null).map((item) => ({
+    label: item.label,
+    href: typeof item.href === "string" ? item.href : item.href(user?.handle ?? ""),
+  }));
 
   return (
     <div className={styles.shell}>
