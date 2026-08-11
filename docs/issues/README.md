@@ -208,6 +208,7 @@ flowchart LR
 | # | 種別 | タイトル | 起票済み |
 | --- | --- | --- | :---: |
 | [0020](0020-infra-api-openapi.md) | `infra` | api の OpenAPI 定義を作り、web の型を生成する | [#46](https://github.com/yama-shu/575-sns/issues/46) |
+| [0021](0021-feat-auth-screens.md) | `feat` | ログイン・登録画面を実装する | [#48](https://github.com/yama-shu/575-sns/issues/48) |
 
 ### M5 公開（起票済みのもの）
 
@@ -278,7 +279,7 @@ flowchart LR
 | 順 | 種別 | タイトル | 対応する画面 |
 | :---: | --- | --- | --- |
 | 1 | `infra` | api の OpenAPI 定義を作り、web の型を生成する（[0020](0020-infra-api-openapi.md) / [#46](https://github.com/yama-shu/575-sns/issues/46)） | 全画面の前提 |
-| 2 | `feat` | ログイン・登録画面を実装する | S-08 / S-09 |
+| 2 | `feat` | ログイン・登録画面を実装する（[0021](0021-feat-auth-screens.md) / [#48](https://github.com/yama-shu/575-sns/issues/48)） | S-08 / S-09 |
 | 3 | `feat` | タイムライン画面を実装する（無限スクロール） | S-01 / S-02 |
 | 4 | `feat` | 投稿作成を実装する（リアルタイム判定・デバウンス） | S-07 |
 | 5 | `feat` | 投稿詳細・ユーザーページを実装する | S-03 / S-04 |
