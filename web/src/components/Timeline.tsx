@@ -30,6 +30,8 @@ type Props = {
   empty: { title: string; hint: React.ReactNode };
   /** ログインしているか。いいねを押せるかの判断に使う。 */
   signedIn: boolean;
+  /** 閲覧者の識別名。自分の句に通報を出さないために使う。 */
+  viewerHandle?: string;
 };
 
 export function Timeline({
@@ -39,6 +41,7 @@ export function Timeline({
   moreHref,
   empty,
   signedIn,
+  viewerHandle,
 }: Props) {
   const [posts, setPosts] = useState(initialPosts);
   const [cursor, setCursor] = useState(initialCursor);
@@ -83,7 +86,7 @@ export function Timeline({
     <>
       <div className={styles.list}>
         {posts.map((post) => (
-          <PostCard key={post.id} post={post} signedIn={signedIn} />
+          <PostCard key={post.id} post={post} signedIn={signedIn} viewerHandle={viewerHandle} />
         ))}
       </div>
 

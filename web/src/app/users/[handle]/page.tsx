@@ -67,6 +67,7 @@ export default async function UserPage({ params, searchParams }: PageProps<"/use
           kind={`user:${handle}`}
           moreHref={publicPath}
           signedIn={user !== null}
+          viewerHandle={user?.handle}
         />
       ) : (
         <p role="alert">句を読み込めませんでした。時間をおいてお試しください。</p>
