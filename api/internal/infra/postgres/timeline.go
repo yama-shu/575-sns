@@ -145,6 +145,39 @@ const homeTimelineQuery = `
 	ORDER BY p.id DESC
 	LIMIT $3`
 
+// UserPosts はある利用者の投稿一覧を返す（S-04）。
+//
+// インデックス #7（`(author_id, id DESC) WHERE status='published'`）を辿る。
+// フォロー中タイムラインが LATERAL の内側で使っているものと同じである。
+//
+// **ブロックの除外を書かない。** プロフィールを引く時点で 404 になるため、
+// ここへ到達する時点でブロック関係は無い（domain.TimelineRepository の但し書き）。
+func (r *TimelineRepository) UserPosts(
+	ctx context.Context, q domain.UserPostQuery,
+) ([]domain.TimelineItem, error) {
+	rows, err := r.pool.Query(ctx, userPostsQuery,
+		q.ViewerID, q.Cursor, q.EffectiveLimit(), q.AuthorID, q.IncludeFollowersOnly)
+	if err != nil {
+		return nil, fmt.Errorf("ユーザーの投稿一覧を取得できません: %w", err)
+	}
+	return scanTimeline(rows)
+}
+
+// userPostsQuery はユーザーページの投稿一覧のクエリ。
+//
+// `$5` が false のときだけ visibility で絞る。**両方を1つの文にする**のは、
+// 条件ごとにクエリを分けると片方だけ直したときに食い違うためである。
+const userPostsQuery = `
+	SELECT ` + selectColumns + `
+	FROM posts p
+	JOIN users u ON u.id = p.author_id
+	WHERE p.author_id = $4
+	  AND p.status = 'published'
+	  AND ($5 OR p.visibility = 'public')
+	  AND ($2::bigint = 0 OR p.id < $2)
+	ORDER BY p.id DESC
+	LIMIT $3`
+
 // scanTimeline は行を読み取る。
 func scanTimeline(rows pgx.Rows) ([]domain.TimelineItem, error) {
 	defer rows.Close()
