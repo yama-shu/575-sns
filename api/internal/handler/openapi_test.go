@@ -143,6 +143,7 @@ func TestSpecCoversImplementedEndpoints(t *testing.T) {
 		"/auth/login":            {http.MethodPost},
 		"/auth/logout":           {http.MethodPost},
 		"/me":                    {http.MethodGet},
+		"/me/profile":            {http.MethodPatch},
 		"/prosody/check":         {http.MethodPost},
 		"/posts":                 {http.MethodPost},
 		"/posts/{id}":            {http.MethodGet, http.MethodDelete},
@@ -205,6 +206,12 @@ func TestResponsesConformToSpec(t *testing.T) {
 			usersWith(profileOwner()), &stubUserTimelineRepo{}, nil,
 			(*handler.Profile).Get)
 		assertConforms(t, doc, http.MethodGet, "/users/{handle}", "200", body)
+	})
+
+	t.Run("PATCH /me/profile の 200", func(t *testing.T) {
+		owner := profileOwner()
+		_, body := callUpdateProfile(t, `{"display_name":"やまだ改"}`, owner, usersWith(owner))
+		assertConforms(t, doc, http.MethodPatch, "/me/profile", "200", body)
 	})
 
 	t.Run("GET /users/{handle}/posts の 200", func(t *testing.T) {

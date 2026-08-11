@@ -86,6 +86,7 @@ func (f *fakeFollowRepo) IsBlocked(_ context.Context, blockerID, blockedID int64
 type followUserRepo struct {
 	byHandle map[string]*domain.User
 	err      error
+	updated  bool
 }
 
 func (r *followUserRepo) Create(context.Context, *domain.User) (*domain.User, error) {
@@ -106,6 +107,18 @@ func (r *followUserRepo) FindByHandle(_ context.Context, handle string) (*domain
 }
 func (r *followUserRepo) ExistsByEmail(context.Context, string) (bool, error) {
 	return false, errors.New("使わない")
+}
+
+// UpdateProfile は更新後の利用者を返す。**保存したかどうかも記録する。**
+// 検証に失敗したのに保存する実装を検出するために使う。
+func (r *followUserRepo) UpdateProfile(
+	_ context.Context, _ int64, displayName, bio string,
+) (*domain.User, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	r.updated = true
+	return &domain.User{ID: 1, Handle: "alice", DisplayName: displayName, Bio: bio}, nil
 }
 
 func actor() *domain.User {
