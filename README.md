@@ -432,6 +432,46 @@ curl -s "localhost:8080/api/v1/timelines/public?limit=2&cursor=57" | jq -c '[.it
 **フォロー中タイムラインには、フォロー相手の `followers` 限定の投稿も含まれます。**
 全体タイムラインは `public` の投稿だけです。
 
+### プロフィールとユーザーの投稿一覧を試す
+
+```bash
+# プロフィール（ログイン不要）
+curl -s localhost:8080/api/v1/users/hanako | jq -c
+# {"handle":"hanako","display_name":"hanako","created_at":"...",
+#  "post_count":5,"following_count":0,"follower_count":1,
+#  "following":false,"blocking":false}
+
+# ログイン済みなら関係が返る
+curl -s -b /tmp/cookies localhost:8080/api/v1/users/hanako | jq -c '{following, blocking}'
+
+# その利用者の投稿（カーソルは他の一覧と同じ）
+curl -s "localhost:8080/api/v1/users/hanako/posts?limit=20" | jq -c '{count:(.items|length), next_cursor}'
+```
+
+**投稿数は閲覧者から見える数です。** フォロワー限定を含めた総数を返すと、
+一覧に出ている件数と合いません。実際に閲覧者を変えて確かめられます。
+
+| 閲覧者 | `post_count` | 一覧 |
+| --- | ---: | ---: |
+| 未ログイン | 5 | 5 件（すべて `public`） |
+| フォロワー | 6 | 6 件（`followers` を含む） |
+| フォローしていない他人 | 5 | 5 件 |
+| 本人 | 6 | 6 件 |
+
+見えない相手は 404 です。**理由を区別しません**
+（[BR-10](docs/design/basic/02-domain-model.md#関係に関するルール)）。
+
+| 状況 | プロフィール | 投稿一覧 |
+| --- | --- | --- |
+| 相手が自分をブロックしている | 404 | 404 |
+| **自分が相手をブロックしている** | **200**（`blocking: true`） | **0 件** |
+| 相手が利用停止・退会済み | 404 | 404 |
+| 識別名が存在しない | 404 | 404 |
+
+自分がブロックした相手だけ見えるのは、**そのページから解除できるようにする**ためです。
+[BR-09](docs/design/basic/02-domain-model.md#関係に関するルール) が隠すよう求めているのは投稿であり、
+プロフィールそのものではありません。
+
 ### いいねを試す
 
 ```bash
