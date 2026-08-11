@@ -21,7 +21,7 @@ api は [#28](https://github.com/yama-shu/575-sns/issues/28) と [#30](https://g
 
 ## やること
 
-- [ ] 判定を呼ぶ経路を作る（[下記](#判定は-route-handler-で中継する)）
+- [ ] 判定を呼ぶ経路を作る（[下記](#判定は-server-action-で中継する)）
 - [ ] デバウンスと IME の制御を実装する
 - [ ] 判定結果の表示（区切り・モーラ数・読み・バッジ）を作る
 - [ ] 投稿フォームを作る（本文・公開範囲・文字数）
@@ -87,18 +87,29 @@ api は [#28](https://github.com/yama-shu/575-sns/issues/28) と [#30](https://g
 
 ## 実装上の注意
 
-### 判定は Route Handler で中継する
+### 判定は Server Action で中継する
 
-Server Action ではなく `web/src/app/api/...` の Route Handler を使う。
+当初は Route Handler（`web/src/app/api/...`）を使う予定だった。
+「Server Action は呼び出しのたびに現在のページを再描画するため、
+入力中に何度も走る判定には重い」と考えたためである。
 
-**Server Action は呼び出しのたびに現在のページを再描画する。**
-判定は入力中に何度も走るため、そのたびにタイムライン全体の再描画が付いてくると無駄が大きい。
-判定結果は入力欄の周りにしか影響しないため、ページの再描画は要らない。
+**測ったところ、この前提は誤りだった。**
+検証用のページと Server Action を用意し、ページの描画回数を数えた。
 
-実装前に**この挙動を実測して確かめる**。確かめずに前提にしない。
+```
+GET  /probe          → [probe] page rendered: 2
+POST /probe (action) → 85 bytes / [probe] page rendered は増えない
+POST /probe (action + Next-Router-State-Tree) → 同上
+```
+
+応答は戻り値だけで、ページの再描画は起きない
+（`revalidatePath` などを呼ばない限り）。
+
+Route Handler を使う理由が消えたため、**他の画面と揃えて Server Action にする**。
+web に2つ目の HTTP 面を増やさずに済み、Origin 検査による CSRF 対策も
+[#48](https://github.com/yama-shu/575-sns/issues/48) と同じ形で効く。
 
 ブラウザが web としか通信しない点（[基本設計 01 §6](../design/basic/01-architecture.md)）は変わらない。
-Route Handler がサーバー側で api を呼ぶ。
 
 ### 応答の追い越し
 
@@ -156,7 +167,14 @@ web は判定結果を**送らない**。送っても読まれないうえ、送
 `follows` を起点にしており、自分をフォローしていない限り自分の投稿は含まれない。
 詠んだ直後に「何も無い画面」へ送られることになる。
 
-**実機で確かめたうえで**、遷移先を全体タイムラインに改め、
+実機で確かめた。tarou が hanako をフォローした状態で両者が投稿すると、
+
+```
+tarou の home   → [('hanako', '古池や蛙飛び込む水の音')]
+tarou の public → [('tarou', '柿くへば…'), ('hanako', '古池や…'), ('aoi', '古池や…')]
+```
+
+遷移先を全体タイムラインに改め、
 [基本設計 04 §2](../design/basic/04-screens.md#2-画面遷移図) を修正する。
 
 ## 参考
