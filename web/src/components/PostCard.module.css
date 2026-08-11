@@ -7,6 +7,33 @@
   background: var(--color-bg);
 }
 
+.standalone {
+  /* 詳細では本文をひとまわり大きくする。1件だけを読む画面のため。 */
+  padding: calc(var(--space) * 1.25);
+}
+
+.standalone .body {
+  font-size: 1.3rem;
+}
+
+/* 投稿者。名前と識別名をまとめてユーザーページへの導線にする。 */
+.author {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  text-decoration: none;
+  flex-wrap: wrap;
+}
+
+.author:hover .displayName {
+  text-decoration: underline;
+}
+
+.detail {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
 .header {
   display: flex;
   align-items: baseline;

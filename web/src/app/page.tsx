@@ -38,6 +38,7 @@ export default async function PublicTimelinePage({
         kind="public"
         initialPosts={timeline.data.items}
         initialCursor={timeline.data.next_cursor}
+        signedIn={user !== null}
         moreHref="/"
         empty={{
           title: "まだ一句もありません",

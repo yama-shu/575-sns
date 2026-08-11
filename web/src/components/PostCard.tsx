@@ -5,6 +5,9 @@
  * 並べるだけで復元でき、**再判定しない**。web で分割し直すと、辞書の更新で
  * 表示が変わりうるうえ、prosody が落ちているときに閲覧できなくなる。
  */
+import Link from "next/link";
+
+import { LikeButton } from "./LikeButton";
 import { RelativeTime } from "./RelativeTime";
 import type { Post } from "@/lib/api/timeline";
 
@@ -15,14 +18,24 @@ const VERDICT_LABEL: Record<string, string> = {
   kyoyo: "許容",
 };
 
-export function PostCard({ post }: { post: Post }) {
+type Props = {
+  post: Post;
+  /** ログインしているか。いいねを押せるかの判断に使う。 */
+  signedIn: boolean;
+  /** 投稿詳細ではリンクにしない。いま見ているページへのリンクは意味がない。 */
+  standalone?: boolean;
+};
+
+export function PostCard({ post, signedIn, standalone = false }: Props) {
   const isTeikei = post.verdict === "teikei";
 
   return (
-    <article className={styles.card}>
+    <article className={`${styles.card} ${standalone ? styles.standalone : ""}`}>
       <header className={styles.header}>
-        <span className={styles.displayName}>{post.author.display_name}</span>
-        <span className={styles.handle}>@{post.author.handle}</span>
+        <Link className={styles.author} href={`/@${post.author.handle}`}>
+          <span className={styles.displayName}>{post.author.display_name}</span>
+          <span className={styles.handle}>@{post.author.handle}</span>
+        </Link>
         <RelativeTime className={styles.time} iso={post.created_at} />
       </header>
 
@@ -41,7 +54,20 @@ export function PostCard({ post }: { post: Post }) {
         >
           {VERDICT_LABEL[post.verdict] ?? post.verdict}
         </span>
-        <span className={styles.likes}>♡ {post.like_count}</span>
+        {/* 一覧では本文をたどれるようにする。詳細では自分自身への導線になるため出さない。 */}
+        {!standalone && (
+          <Link className={styles.detail} href={`/posts/${post.id}`}>
+            この句を見る
+          </Link>
+        )}
+        <span className={styles.likes}>
+          <LikeButton
+            likeCount={post.like_count}
+            likedByMe={post.liked_by_me}
+            postId={post.id}
+            signedIn={signedIn}
+          />
+        </span>
       </footer>
     </article>
   );
