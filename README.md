@@ -260,6 +260,7 @@ http://localhost:3000 を開きます。M4 で実装した画面は以下です�
 | `/posts/:id` | S-03 投稿詳細 | ✅ |
 | `/@:handle` | S-04 ユーザーページ | ✅ |
 | `/compose` | S-07 投稿作成 | ❌ `/login` へ移動 |
+| `/settings/profile` | S-10 プロフィール編集 | ❌ `/login` へ移動 |
 | `/login` | S-08 ログイン | ✅ |
 | `/signup` | S-09 アカウント登録 | ✅ |
 
@@ -304,6 +305,29 @@ http://localhost:3000 を開きます。M4 で実装した画面は以下です�
 見えない相手・見えない句はすべて 404 の画面になります。
 **理由を出し分けません** — 区別すると存在を教えてしまいます
 （[BR-10](docs/design/basic/02-domain-model.md#関係に関するルール)）。
+
+### プロフィールを変える
+
+ナビゲーションの「設定」から表示名と自己紹介を変えられます（[FR-01-03](docs/requirements/01-requirements.md)）。
+
+```bash
+# 自己紹介だけ空にする（表示名には触れない）
+curl -s -b /tmp/cookies -X PATCH localhost:8080/api/v1/me/profile \
+  -H 'Content-Type: application/json' -d '{"bio":""}' | jq -c
+# {"handle":"tarou","display_name":"たろう","bio":""}
+```
+
+**省略と空文字を区別します。** 送らなかった項目は変わらず、空文字を送るとその項目が消えます。
+一度書いたら消せない自己紹介は、書くこと自体をためらわせるためです。
+
+**アイコンは未対応です。** [FR-01-03](docs/requirements/01-requirements.md) は
+表示名・自己紹介・アイコンを挙げていますが、**画像を置く場所が設計されていません**。
+`users.avatar_url` の列はありますが、URL を直接入力させる形にはしていません
+（任意の外部 URL を画面に埋め込むと、閲覧者の情報が第三者へ渡ります）。
+オブジェクトストレージの選定には ADR が要ります。
+
+識別名（`@handle`）とメールアドレスは変えられません。
+識別名は[再利用を禁じている](docs/design/basic/02-domain-model.md)ため、変更も同じ問題を持ちます。
 
 ### 詠む
 
