@@ -8,6 +8,7 @@
 import Link from "next/link";
 
 import { LikeButton } from "./LikeButton";
+import { ReportButton } from "./ReportButton";
 import { RelativeTime } from "./RelativeTime";
 import type { Post } from "@/lib/api/timeline";
 
@@ -24,10 +25,17 @@ type Props = {
   signedIn: boolean;
   /** 投稿詳細ではリンクにしない。いま見ているページへのリンクは意味がない。 */
   standalone?: boolean;
+  /**
+   * 閲覧者の識別名。**自分の句に通報を出さないため**に使う（BR-07）。
+   * 未ログインなら undefined。
+   */
+  viewerHandle?: string;
 };
 
-export function PostCard({ post, signedIn, standalone = false }: Props) {
+export function PostCard({ post, signedIn, standalone = false, viewerHandle }: Props) {
   const isTeikei = post.verdict === "teikei";
+  // 自分の句は通報できない（BR-07）。未ログインでも出さない（api が 401 で断る）。
+  const canReport = signedIn && viewerHandle !== undefined && viewerHandle !== post.author.handle;
 
   return (
     <article className={`${styles.card} ${standalone ? styles.standalone : ""}`}>
@@ -60,6 +68,7 @@ export function PostCard({ post, signedIn, standalone = false }: Props) {
             この句を見る
           </Link>
         )}
+        {canReport && <ReportButton postId={post.id} />}
         <span className={styles.likes}>
           <LikeButton
             likeCount={post.like_count}

@@ -33,7 +33,7 @@ export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
 
   return (
     <AppShell current="/" title="句" user={user}>
-      <PostCard post={post} signedIn={user !== null} standalone />
+      <PostCard post={post} signedIn={user !== null} standalone viewerHandle={user?.handle} />
       {isMine && <DeletePostButton postId={post.id} />}
     </AppShell>
   );
