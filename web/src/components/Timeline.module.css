@@ -1,0 +1,64 @@
+/* タイムラインの並びと、続きの読み込み。 */
+
+.list {
+  display: grid;
+  gap: var(--space);
+  margin: var(--space) 0;
+}
+
+.more {
+  display: grid;
+  place-items: center;
+  padding: var(--space) 0;
+}
+
+/*
+ * 「もっと読む」。
+ *
+ * JavaScript が無い環境ではリンクとして働き、?cursor= で次のページへ行ける。
+ * スクロールが下端に達したときは、これを自動で押す（FR-03-03 と NFR-06-03 の両立）。
+ */
+.moreButton {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 10px 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.moreButton:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.end {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: var(--space) 0;
+}
+
+.empty {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  padding: calc(var(--space) * 2) var(--space);
+  text-align: center;
+  color: var(--color-muted);
+  display: grid;
+  gap: 8px;
+}
+
+.emptyTitle {
+  color: var(--color-fg);
+  font-weight: 600;
+  margin: 0;
+}
+
+.emptyHint {
+  margin: 0;
+  font-size: 0.9rem;
+}
