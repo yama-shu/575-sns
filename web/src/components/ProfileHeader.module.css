@@ -1,0 +1,74 @@
+/* ユーザーページの見出し（S-04）。 */
+
+.profile {
+  display: grid;
+  gap: 10px;
+  padding: var(--space);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-subtle);
+}
+
+.identity {
+  display: grid;
+  gap: 2px;
+}
+
+.displayName {
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.handle {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.bio {
+  /* 改行を保つ。自己紹介は文章として書かれる。 */
+  white-space: pre-wrap;
+}
+
+.counts {
+  display: flex;
+  gap: var(--space);
+  margin: 0;
+  flex-wrap: wrap;
+}
+
+.count {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+
+.count dt {
+  color: var(--color-muted);
+}
+
+.count dd {
+  margin: 0;
+  font-weight: 700;
+  /* 数が並ぶ位置を揃える。 */
+  font-variant-numeric: tabular-nums;
+}
+
+.joined {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.blocked {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-size: 0.85rem;
+}
+
+.signedOut {
+  font-size: 0.9rem;
+  color: var(--color-muted);
+}
