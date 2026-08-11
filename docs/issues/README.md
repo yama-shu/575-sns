@@ -214,6 +214,7 @@ flowchart LR
 | [0024](0024-fix-reading-priority.md) | `fix` | 読みの解決の優先順位を直す（読めない語と数字） | [#53](https://github.com/yama-shu/575-sns/issues/53) |
 | [0025](0025-fix-screen-defects.md) | `fix` | 画面の不具合を直す（句の間隔・狭い画面のヘッダー・ハイドレーション） | [#56](https://github.com/yama-shu/575-sns/issues/56) |
 | [0026](0026-feat-user-profile-api.md) | `feat` | プロフィールとユーザーの投稿一覧を返す API を実装する | [#58](https://github.com/yama-shu/575-sns/issues/58) |
+| [0027](0027-feat-post-and-user-pages.md) | `feat` | 投稿詳細とユーザーページを実装する | [#60](https://github.com/yama-shu/575-sns/issues/60) |
 
 ### M5 公開（起票済みのもの）
 
@@ -288,7 +289,7 @@ flowchart LR
 | 3 | `feat` | タイムライン画面を実装する（無限スクロール）（[0022](0022-feat-timeline-screens.md) / [#50](https://github.com/yama-shu/575-sns/issues/50)） | S-01 / S-02 |
 | 4 | `feat` | 投稿作成を実装する（リアルタイム判定・デバウンス）（[0023](0023-feat-compose-screen.md) / [#52](https://github.com/yama-shu/575-sns/issues/52)） | S-07 |
 | 5 | `feat` | プロフィールとユーザーの投稿一覧を返す API を実装する（[0026](0026-feat-user-profile-api.md) / [#58](https://github.com/yama-shu/575-sns/issues/58)） | S-04 の前提 |
-| 6 | `feat` | 投稿詳細・ユーザーページを実装する | S-03 / S-04 |
+| 6 | `feat` | 投稿詳細・ユーザーページを実装する（[0027](0027-feat-post-and-user-pages.md) / [#60](https://github.com/yama-shu/575-sns/issues/60)） | S-03 / S-04 |
 | 7 | `feat` | プロフィール編集を実装する | S-10 |
 | 8 | `feat` | 通報のモーダルを実装する | S-12 |
 | 9 | `feat` | フォロー中一覧・フォロワー一覧・ブロック中一覧を実装する | S-05 / S-06 / S-11 |
