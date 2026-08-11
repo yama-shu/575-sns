@@ -16,9 +16,11 @@ type fakeTimelineRepo struct {
 	items []domain.TimelineItem
 	err   error
 
-	publicCalls int
-	homeCalls   int
-	gotQuery    domain.TimelineQuery
+	publicCalls    int
+	homeCalls      int
+	userPostsCalls int
+	gotQuery       domain.TimelineQuery
+	gotUserQuery   domain.UserPostQuery
 }
 
 func (f *fakeTimelineRepo) Public(_ context.Context, q domain.TimelineQuery) ([]domain.TimelineItem, error) {
@@ -30,6 +32,14 @@ func (f *fakeTimelineRepo) Public(_ context.Context, q domain.TimelineQuery) ([]
 func (f *fakeTimelineRepo) Home(_ context.Context, q domain.TimelineQuery) ([]domain.TimelineItem, error) {
 	f.homeCalls++
 	f.gotQuery = q
+	return f.items, f.err
+}
+
+func (f *fakeTimelineRepo) UserPosts(
+	_ context.Context, q domain.UserPostQuery,
+) ([]domain.TimelineItem, error) {
+	f.userPostsCalls++
+	f.gotUserQuery = q
 	return f.items, f.err
 }
 
