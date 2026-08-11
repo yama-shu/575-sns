@@ -1,0 +1,90 @@
+/* 判定結果の表示（基本設計 04 §3）。 */
+
+.panel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space);
+  background: var(--color-bg-subtle);
+  /* 判定の切り替わりで高さが飛ばないようにする。入力欄が動くと打ちにくい。 */
+  min-height: 7.5rem;
+}
+
+.hint {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.badge {
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.reason {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  margin-top: 4px;
+}
+
+/* 句の一覧。横に並べ、狭いときは折り返す。 */
+.segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.segment {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.segmentText {
+  font-size: 1.1rem;
+}
+
+.segmentReading {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.segmentMora {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+/*
+  規定からズレている句を強調する。
+  **色だけで示さない。** 色が見えない環境でも下線と太字で分かる。
+*/
+.segmentOff .segmentText {
+  font-weight: 700;
+  text-decoration: underline wavy;
+  text-underline-offset: 4px;
+}
+
+.segmentOff .segmentDiff {
+  color: var(--color-accent);
+}
+
+/* 区切れなかったときは読みだけを出す。 */
+.reading {
+  font-size: 1rem;
+  color: var(--color-muted);
+  word-break: break-all;
+}
+
+.teikei {
+  border-color: var(--color-ok);
+}
+
+.kyoyo {
+  border-color: var(--color-accent);
+}
+
+.hacho,
+.unknown {
+  border-color: var(--color-error);
+}
