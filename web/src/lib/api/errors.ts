@@ -7,6 +7,7 @@
  * NFR-06-02 が「単に『エラー』とだけ表示しない」ことを求めている。
  * 対応表をここ1箇所に置き、知らない `code` の既定も決める。
  */
+import { shortfall } from "../post-rules";
 import type { ApiError } from "./client";
 
 /** 画面に出すエラー。項目に紐づくものと、フォーム全体に出すものを分ける。 */
@@ -30,12 +31,17 @@ const MESSAGES: Record<string, string> = {
   UPSTREAM_TIMEOUT: "判定に時間がかかっています。しばらく経ってからお試しください",
   API_UNREACHABLE: "サーバーに接続できませんでした。時間をおいてお試しください",
   INVALID_RESPONSE: "サーバーの応答を解釈できませんでした",
+  PROSODY_HACHO: "五七五になっていません",
+  PROSODY_UNKNOWN_READING: "読み方が分からない語があります",
 };
 
 /** `code` を、その項目に紐づけたい場合の対応。 */
 const FIELD_OF: Record<string, string> = {
   HANDLE_TAKEN: "handle",
   EMAIL_TAKEN: "email",
+  // 判定で弾かれたときは本文を直すことになるため、本文に紐づける。
+  PROSODY_HACHO: "body",
+  PROSODY_UNKNOWN_READING: "body",
 };
 
 /**
@@ -46,12 +52,40 @@ const FIELD_OF: Record<string, string> = {
  */
 export function toFormError(error: ApiError): FormError {
   const field = FIELD_OF[error.code] ?? fieldOfValidation(error);
-  const message = MESSAGES[error.code] ?? error.message;
+  const message = describe(error);
 
   if (field) {
     return { fields: { [field]: message } };
   }
   return { message: withRequestId(message, error), fields: {} };
+}
+
+/**
+ * 文言を組み立てる。判定で弾かれたときは `details` から理由を足す。
+ *
+ * **「五七五になっていません」だけで終わらせない。** どこが何音ずれているのかを
+ * 伝えないと直しようがない（基本設計 04 §3 / NFR-06-02）。
+ */
+function describe(error: ApiError): string {
+  const base = MESSAGES[error.code] ?? error.message;
+
+  if (error.code === "PROSODY_UNKNOWN_READING") {
+    const words = unreadableWords(error);
+    // 語が取れなければ基本の文言に留める。「」だけを出しても意味がない。
+    return words.length === 0 ? base : `「${words.join("」「")}」の読み方が分かりませんでした`;
+  }
+  if (error.code === "PROSODY_HACHO") {
+    const total = error.details?.["total_mora"];
+    if (typeof total !== "number") return base;
+    return `${base}（${total}音）。${shortfall(total)}`;
+  }
+  return base;
+}
+
+function unreadableWords(error: ApiError): string[] {
+  const words = error.details?.["unreadable"];
+  if (!Array.isArray(words)) return [];
+  return words.filter((word): word is string => typeof word === "string");
 }
 
 function fieldOfValidation(error: ApiError): string | undefined {
