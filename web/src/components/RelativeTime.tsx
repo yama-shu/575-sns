@@ -3,12 +3,29 @@
 /**
  * 相対時刻（「2時間前」）。
  *
- * **サーバー側で計算しない。** 計算した HTML がキャッシュされると古い表示が残り、
- * 閲覧者との時差でもずれる。絶対時刻を `dateTime` に持たせ、表示はクライアントで作る。
+ * **相対時刻をサーバー側で計算しない。** 計算した HTML がキャッシュされると
+ * 古い表示が残り、閲覧者との時差でもずれる。絶対時刻を `dateTime` に持たせ、
+ * 表示はクライアントで作る。
  *
  * 絶対時刻を属性に残すことで、読み上げと機械可読性も保てる。
+ *
+ * **絶対時刻の整形はタイムゾーンを固定する。** `toLocaleString("ja-JP")` は
+ * 実行環境のタイムゾーンに依存するため、サーバー（コンテナ = UTC）と
+ * ブラウザ（JST）で違う文字列になり、ハイドレーションが食い違っていた（#56）。
+ *
+ *     SSR     : 2026/8/11 6:22:16
+ *     ブラウザ : 2026/8/11 15:22:16
+ *
+ * 絶対時刻は時間が経っても古くならないため、サーバーで整形してよい。
+ * 問題は環境依存であることなので、`timeZone` を明示してどこで整形しても
+ * 同じ文字列にする。日本語話者向けのサービスであり、閲覧者の地域に
+ * 合わせる要件は無い。全員が同じ時刻表記を見る方が、投稿の前後関係を
+ * 話題にするときに食い違わない。
  */
 import { useSyncExternalStore } from "react";
+
+/** 表示に使うタイムゾーン。実行環境に依存させないために明示する。 */
+const TIME_ZONE = "Asia/Tokyo";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -63,12 +80,13 @@ function toRelative(iso: string, now: number): string {
     year: "numeric",
     month: "long",
     day: "numeric",
+    timeZone: TIME_ZONE,
   });
 }
 
 export function RelativeTime({ iso, className }: { iso: string; className?: string }) {
   const now = useSyncExternalStore(subscribe, () => currentTime, getServerSnapshot);
-  const absolute = new Date(iso).toLocaleString("ja-JP");
+  const absolute = new Date(iso).toLocaleString("ja-JP", { timeZone: TIME_ZONE });
 
   return (
     <time className={className} dateTime={iso} title={absolute}>
