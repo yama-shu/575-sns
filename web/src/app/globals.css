@@ -16,6 +16,9 @@
   --color-accent-fg: #ffffff;
   --color-error: #a4262c;
   --color-error-bg: #fdf3f4;
+  --color-ok: #2e7d32;
+  /* 入力欄と判定結果を地の色から分ける（S-07）。 */
+  --color-bg-subtle: #f4f4ef;
 
   --radius: 8px;
   --space: 16px;
@@ -32,6 +35,8 @@
     --color-accent-fg: #10221d;
     --color-error: #ff9a9f;
     --color-error-bg: #2a1a1c;
+    --color-ok: #7fcf87;
+    --color-bg-subtle: #1d1f23;
   }
 }
 
