@@ -86,6 +86,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * プロフィールを更新する
+         * @description 表示名と自己紹介を変える（FR-01-03）。
+         *
+         *     **省略と空文字を区別する。** 項目を送らなければ変えない。
+         *     空文字を送ればその項目を消す。自己紹介は消せなければならない。
+         *
+         *     **アイコンは扱わない。** 画像を置く場所が設計されていない
+         *     （オブジェクトストレージの選定が未了。#62）。
+         *
+         */
+        patch: operations["updateProfile"];
+        trace?: never;
+    };
     "/prosody/check": {
         parameters: {
             query?: never;
@@ -470,6 +497,18 @@ export interface components {
             /** @description `unknown` のとき、読めなかった語 */
             unreadable?: string[];
         };
+        /** @description **項目を省略すると変えない。** 空文字を送るとその項目を消す。
+         *      */
+        UpdateProfileRequest: {
+            display_name?: string;
+            bio?: string;
+        };
+        ProfileUpdated: {
+            handle: string;
+            display_name: string;
+            bio: string;
+            avatar_url?: string;
+        };
         Profile: {
             handle: string;
             display_name: string;
@@ -743,6 +782,33 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+        };
+    };
+    updateProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新できた */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileUpdated"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     checkProsody: {
