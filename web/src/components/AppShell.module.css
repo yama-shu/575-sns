@@ -22,13 +22,22 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--space);
+  gap: 8px var(--space);
   margin-bottom: var(--space);
+  /*
+   * 狭い画面では2段に分ける。
+   *
+   * **押し込めない。** 390px では見出しと右側が収まらず、
+   * 語の途中で折り返して読めなくなっていた（#56）。
+   */
+  flex-wrap: wrap;
 }
 
 .title {
-  font-size: 1.35rem;
+  font-size: 1.2rem;
   margin: 0;
+  /* 語の途中で折り返さない。折り返すなら要素ごと次の行へ送る。 */
+  white-space: nowrap;
 }
 
 .account {
@@ -42,6 +51,8 @@
 .logout {
   font: inherit;
   font-size: 0.8rem;
+  /* ボタンの中で折り返さない。3行になっていた（#56）。 */
+  white-space: nowrap;
   padding: 4px 10px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -76,6 +87,10 @@
 }
 
 @media (min-width: 769px) {
+  .title {
+    font-size: 1.35rem;
+  }
+
   .shell {
     display: grid;
     grid-template-columns: 200px 1fr;
