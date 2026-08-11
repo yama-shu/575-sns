@@ -1452,18 +1452,35 @@ func TestTimelineQueryUsesIndex(t *testing.T) {
 	limit := 20
 	tests := map[string]struct {
 		query     string
+		args      []any
 		wantIndex string
 	}{
 		// 述語が全行に当てはまる状況ではプランナが主キーの逆順スキャンを
 		// 選ぶこともあるため、全体タイムラインはインデックス名を求めない。
-		"全体タイムライン": {postgres.PublicTimelineQueryForTest, ""},
+		"全体タイムライン": {postgres.PublicTimelineQueryForTest, []any{me.ID, int64(0), limit}, ""},
 		// フォロー中はフォロー先ごとに辿るため、#7 が使われるはずである。
-		"フォロー中タイムライン": {postgres.HomeTimelineQueryForTest, "posts_author_timeline_idx"},
+		"フォロー中タイムライン": {
+			postgres.HomeTimelineQueryForTest,
+			[]any{me.ID, int64(0), limit},
+			"posts_author_timeline_idx",
+		},
+		// ユーザーページも投稿者ごとに辿るため、同じ #7 が使われるはずである。
+		"ユーザーの投稿一覧": {
+			postgres.UserPostsQueryForTest,
+			[]any{me.ID, int64(0), limit, authors[0], true},
+			"posts_author_timeline_idx",
+		},
+		// 数え上げも同じインデックスで済む。移行を足していないことの確認になる。
+		"プロフィールの件数": {
+			postgres.ProfileCountsQueryForTest,
+			[]any{authors[0], true},
+			"posts_author_timeline_idx",
+		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			rows, err := pool.Query(ctx, "EXPLAIN "+tt.query, me.ID, int64(0), limit)
+			rows, err := pool.Query(ctx, "EXPLAIN "+tt.query, tt.args...)
 			if err != nil {
 				t.Fatalf("実行計画を取得できない: %v", err)
 			}
@@ -1991,5 +2008,237 @@ func TestHomeTimelineExcludesBlockedFolloweesBothWays(t *testing.T) {
 	}
 	if !got[visible] {
 		t.Errorf("ブロックしていない相手の投稿が消えている: %d", visible)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// プロフィールとユーザーの投稿一覧（S-04）
+// ---------------------------------------------------------------------------
+
+// insertPost は指定した公開範囲の投稿を1件入れる。
+func insertPost(t *testing.T, pool *pgxpool.Pool, authorID int64, v domain.Visibility) int64 {
+	t.Helper()
+	post := newPost(authorID)
+	post.Visibility = v
+	created, err := postgres.NewPostRepository(pool).Create(context.Background(), post)
+	if err != nil {
+		t.Fatalf("投稿できない: %v", err)
+	}
+	return created.ID
+}
+
+func TestProfileCountsRespectVisibility(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	author, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	fan, err := users.Create(ctx, newUser("fan"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	insertPost(t, pool, author.ID, domain.VisibilityPublic)
+	insertPost(t, pool, author.ID, domain.VisibilityPublic)
+	insertPost(t, pool, author.ID, domain.VisibilityFollowers)
+
+	follows := postgres.NewFollowRepository(pool)
+	if err := follows.Follow(ctx, fan.ID, author.ID); err != nil {
+		t.Fatalf("フォローできない: %v", err)
+	}
+	if err := follows.Follow(ctx, author.ID, fan.ID); err != nil {
+		t.Fatalf("フォローできない: %v", err)
+	}
+
+	repo := postgres.NewProfileRepository(pool)
+
+	t.Run("フォロワー限定を含めない", func(t *testing.T) {
+		counts, err := repo.Counts(ctx, author.ID, false)
+		if err != nil {
+			t.Fatalf("数えられない: %v", err)
+		}
+		if counts.Posts != 2 {
+			t.Errorf("投稿数が違う: %d, want 2", counts.Posts)
+		}
+		if counts.Following != 1 || counts.Followers != 1 {
+			t.Errorf("フォローの数が違う: %+v", counts)
+		}
+	})
+
+	t.Run("フォロワー限定を含める", func(t *testing.T) {
+		counts, err := repo.Counts(ctx, author.ID, true)
+		if err != nil {
+			t.Fatalf("数えられない: %v", err)
+		}
+		if counts.Posts != 3 {
+			t.Errorf("投稿数が違う: %d, want 3", counts.Posts)
+		}
+	})
+}
+
+// 削除済みの投稿を数に含めないこと。
+func TestProfileCountsExcludeDeleted(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	author, err := postgres.NewUserRepository(pool).Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	id := insertPost(t, pool, author.ID, domain.VisibilityPublic)
+	insertPost(t, pool, author.ID, domain.VisibilityPublic)
+
+	if err := postgres.NewPostRepository(pool).Delete(ctx, id, time.Now()); err != nil {
+		t.Fatalf("削除できない: %v", err)
+	}
+
+	counts, err := postgres.NewProfileRepository(pool).Counts(ctx, author.ID, true)
+	if err != nil {
+		t.Fatalf("数えられない: %v", err)
+	}
+	if counts.Posts != 1 {
+		t.Errorf("削除済みを数えている: %d, want 1", counts.Posts)
+	}
+}
+
+func TestUserPostsRespectVisibility(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	author, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	viewer, err := users.Create(ctx, newUser("viewer"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	publicID := insertPost(t, pool, author.ID, domain.VisibilityPublic)
+	followersID := insertPost(t, pool, author.ID, domain.VisibilityFollowers)
+	deletedID := insertPost(t, pool, author.ID, domain.VisibilityPublic)
+	if err := postgres.NewPostRepository(pool).Delete(ctx, deletedID, time.Now()); err != nil {
+		t.Fatalf("削除できない: %v", err)
+	}
+
+	repo := postgres.NewTimelineRepository(pool)
+	limit := 20
+
+	t.Run("フォロワー限定を含めない", func(t *testing.T) {
+		items, err := repo.UserPosts(ctx, domain.UserPostQuery{
+			TimelineQuery: domain.TimelineQuery{ViewerID: &viewer.ID, Limit: &limit},
+			AuthorID:      author.ID,
+		})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		if len(items) != 1 || items[0].Post.ID != publicID {
+			t.Fatalf("公開投稿だけにならない: %+v", items)
+		}
+	})
+
+	t.Run("フォロワー限定を含める", func(t *testing.T) {
+		items, err := repo.UserPosts(ctx, domain.UserPostQuery{
+			TimelineQuery:        domain.TimelineQuery{ViewerID: &viewer.ID, Limit: &limit},
+			AuthorID:             author.ID,
+			IncludeFollowersOnly: true,
+		})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		if len(items) != 2 {
+			t.Fatalf("件数が違う: %d, want 2", len(items))
+		}
+		// 新しい順。削除済みは含まれない。
+		if items[0].Post.ID != followersID || items[1].Post.ID != publicID {
+			t.Errorf("並びが違う: %d, %d", items[0].Post.ID, items[1].Post.ID)
+		}
+	})
+
+	t.Run("他人の投稿は混ざらない", func(t *testing.T) {
+		other, err := users.Create(ctx, newUser("other"))
+		if err != nil {
+			t.Fatalf("登録できない: %v", err)
+		}
+		insertPost(t, pool, other.ID, domain.VisibilityPublic)
+
+		items, err := repo.UserPosts(ctx, domain.UserPostQuery{
+			TimelineQuery:        domain.TimelineQuery{Limit: &limit},
+			AuthorID:             author.ID,
+			IncludeFollowersOnly: true,
+		})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		for _, item := range items {
+			if item.Post.AuthorID != author.ID {
+				t.Errorf("他人の投稿が混ざっている: %d", item.Post.ID)
+			}
+		}
+	})
+}
+
+// カーソルで遡れること。重複も欠落も出ないこと。
+func TestUserPostsPaginate(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	author, err := postgres.NewUserRepository(pool).Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	want := make([]int64, 0, 5)
+	for range 5 {
+		want = append(want, insertPost(t, pool, author.ID, domain.VisibilityPublic))
+	}
+
+	repo := postgres.NewTimelineRepository(pool)
+	limit := 2
+	seen := []int64{}
+	cursor := int64(0)
+	for range 3 {
+		items, err := repo.UserPosts(ctx, domain.UserPostQuery{
+			TimelineQuery: domain.TimelineQuery{Cursor: cursor, Limit: &limit},
+			AuthorID:      author.ID,
+		})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		for _, item := range items {
+			seen = append(seen, item.Post.ID)
+		}
+		if len(items) == 0 {
+			break
+		}
+		cursor = items[len(items)-1].Post.ID
+	}
+
+	if len(seen) != len(want) {
+		t.Fatalf("件数が違う: %d, want %d", len(seen), len(want))
+	}
+	unique := map[int64]bool{}
+	for _, id := range seen {
+		if unique[id] {
+			t.Fatalf("重複している: %d", id)
+		}
+		unique[id] = true
+	}
+	// 新しい順で返るため、投入と逆順になる。
+	for i, id := range seen {
+		if id != want[len(want)-1-i] {
+			t.Errorf("%d番目が違う: %d, want %d", i, id, want[len(want)-1-i])
+		}
 	}
 }
