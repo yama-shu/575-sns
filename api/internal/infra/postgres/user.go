@@ -57,6 +57,39 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) (*domain
 	return &created, nil
 }
 
+// UpdateProfile は表示名と自己紹介を更新する。
+//
+// **更新後の行を返す。** 送った値をそのまま画面に残すと、
+// サーバーが正規化した結果と食い違う。
+//
+// 自己紹介は空文字を許す。列は NULL 可だが、空文字と NULL を区別しない
+// （読み出しは COALESCE で空文字に寄せている）。
+func (r *UserRepository) UpdateProfile(
+	ctx context.Context, userID int64, displayName, bio string,
+) (*domain.User, error) {
+	const query = `
+		UPDATE users
+		SET display_name = $2, bio = $3, updated_at = now()
+		WHERE id = $1 AND status = 'active'
+		RETURNING id, handle, email, password_hash, display_name,
+		          COALESCE(bio, ''), COALESCE(avatar_url, ''), status, created_at, updated_at`
+
+	var updated domain.User
+	err := r.pool.QueryRow(ctx, query, userID, displayName, bio).Scan(
+		&updated.ID, &updated.Handle, &updated.Email, &updated.PasswordHash,
+		&updated.DisplayName, &updated.Bio, &updated.AvatarURL,
+		&updated.Status, &updated.CreatedAt, &updated.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// 利用停止・退会済みは更新させない。存在しない ID と区別しない。
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("プロフィールを更新できません: %w", err)
+	}
+	return &updated, nil
+}
+
 // FindByID は ID で利用者を引く。
 func (r *UserRepository) FindByID(ctx context.Context, id int64) (*domain.User, error) {
 	const query = `

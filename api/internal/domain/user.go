@@ -107,6 +107,17 @@ func ValidatePassword(password string) error {
 	return nil
 }
 
+// ValidateBio は自己紹介を検査する。
+//
+// **空を許す。** 一度書いたら消せない項目は、書くこと自体をためらわせる。
+// 五七五である必要もない（FR-01-03）。
+func ValidateBio(bio string) error {
+	if utf8.RuneCountInString(bio) > BioMaxLength {
+		return NewValidationError("bio", "自己紹介は200文字以内で入力してください")
+	}
+	return nil
+}
+
 // ValidateDisplayName は表示名を検査する。
 func ValidateDisplayName(displayName string) error {
 	switch {

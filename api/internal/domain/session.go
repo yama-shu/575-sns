@@ -53,6 +53,11 @@ type UserRepository interface {
 	FindByHandle(ctx context.Context, handle string) (*User, error)
 	// ExistsByEmail はメールアドレスが登録済みか。
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
+	// UpdateProfile は表示名と自己紹介を更新し、更新後の利用者を返す。
+	//
+	// **更新後の値を返す。** 送った値をそのまま画面に残すと、
+	// サーバーが正規化した結果と食い違う。
+	UpdateProfile(ctx context.Context, userID int64, displayName, bio string) (*User, error)
 }
 
 // SessionRepository はセッションの永続化。
