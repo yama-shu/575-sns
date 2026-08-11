@@ -1,0 +1,105 @@
+/* 投稿フォーム（S-07 / 基本設計 04 §3）。 */
+
+.form {
+  display: grid;
+  gap: 8px;
+}
+
+.label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.textarea {
+  font: inherit;
+  /* iOS で入力時に画面が拡大されるのを防ぐ（16px 未満だと拡大される）。 */
+  font-size: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  resize: vertical;
+}
+
+.count {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  margin: 0;
+  text-align: right;
+}
+
+.retry {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  cursor: pointer;
+  justify-self: start;
+}
+
+.error {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.visibility {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  /* 公開範囲は左、ボタンは右へ寄せる。 */
+  margin-right: auto;
+}
+
+.select {
+  font: inherit;
+  font-size: 16px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+.cancel {
+  font: inherit;
+  padding: 10px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  cursor: pointer;
+}
+
+.submit {
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 24px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  cursor: pointer;
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
