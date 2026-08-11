@@ -69,3 +69,23 @@ export function updateProfile(body: {
 }): Promise<ApiResult<ProfileUpdated>> {
   return callApi<ProfileUpdated>("/me/profile", { method: "PATCH", body });
 }
+
+export type ReportReason = components["schemas"]["ReportReason"];
+export type Report = components["schemas"]["Report"];
+
+/**
+ * 投稿を通報する（FR-05-01）。
+ *
+ * **冪等ではない。** 同じ投稿への2回目は 409 が返る。
+ * 黙って成功にすると「通報が届いた」と誤解する（#36）。
+ */
+export function reportPost(
+  postId: string,
+  reason: ReportReason,
+  comment: string,
+): Promise<ApiResult<Report>> {
+  return callApi<Report>(`/posts/${encodeURIComponent(postId)}/report`, {
+    method: "POST",
+    body: comment === "" ? { reason } : { reason, comment },
+  });
+}
