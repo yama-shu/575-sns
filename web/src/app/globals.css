@@ -1,0 +1,65 @@
+/*
+ * 575 の共通スタイル。
+ *
+ * CSS フレームワークを入れていない。画面は 13 枚、要素は入力欄・ボタン・
+ * 投稿カードが中心であり、フレームワークの学習と設定に見合う規模ではない（#48）。
+ *
+ * レイアウトは NFR-06-01 に従い、スマートフォンを主とする。
+ */
+
+:root {
+  --color-bg: #fdfdfb;
+  --color-fg: #1a1a1a;
+  --color-muted: #6b6b6b;
+  --color-border: #dcdcd6;
+  --color-accent: #2f5d50;
+  --color-accent-fg: #ffffff;
+  --color-error: #a4262c;
+  --color-error-bg: #fdf3f4;
+
+  --radius: 8px;
+  --space: 16px;
+  --content-width: 640px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #16171a;
+    --color-fg: #ececec;
+    --color-muted: #a0a0a0;
+    --color-border: #33353a;
+    --color-accent: #7fb3a3;
+    --color-accent-fg: #10221d;
+    --color-error: #ff9a9f;
+    --color-error-bg: #2a1a1c;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family:
+    "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, system-ui, sans-serif;
+  line-height: 1.7;
+  /* 五七五は縦に短い。行間を広めに取り、句の区切りを読み取りやすくする。 */
+}
+
+a {
+  color: inherit;
+}
+
+/* キーボード操作の可視化（NFR-06-03）。既定の輪郭を消さない。 */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
