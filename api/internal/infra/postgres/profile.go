@@ -27,7 +27,7 @@ func NewProfileRepository(pool *pgxpool.Pool) *ProfileRepository {
 //
 //	投稿数     : posts_author_timeline_idx (author_id, id DESC) WHERE status='published'
 //	フォロー数 : follows_pkey (follower_id, followee_id)
-//	フォロワー数: follows_followee_id_idx (followee_id)
+//	フォロワー数: follows_followers_list_idx (followee_id, follower_id DESC)
 //
 // **実行計画のテストはこの定数を使う。** テスト側に書き写すと、
 // 実装を変えたときにテストが古いクエリを検査し続ける（#41 で判明）。

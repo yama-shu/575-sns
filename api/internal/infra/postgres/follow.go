@@ -58,7 +58,7 @@ func (r *FollowRepository) IsFollowing(ctx context.Context, followerID, followee
 
 // CountFollowers はフォロワー数を返す。
 //
-// 非正規化していない。follows_followee_id_idx があるため数えても速く、
+// 非正規化していない。follows_followers_list_idx があるため数えても速く、
 // 列を持つと更新漏れで実数とずれたときに気づけない。
 func (r *FollowRepository) CountFollowers(ctx context.Context, userID int64) (int, error) {
 	const query = `SELECT count(*) FROM follows WHERE followee_id = $1`
