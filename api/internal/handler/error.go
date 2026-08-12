@@ -41,6 +41,7 @@ var statusOf = map[domain.ErrorCode]int{
 	domain.CodeCannotBlockSelf:       http.StatusUnprocessableEntity,
 	domain.CodeCannotReportSelf:      http.StatusUnprocessableEntity,
 	domain.CodeAlreadyReported:       http.StatusConflict,
+	domain.CodeAlreadyHandled:        http.StatusConflict,
 	domain.CodeBlockedUser:           http.StatusUnprocessableEntity,
 	domain.CodeProsodyHacho:          http.StatusUnprocessableEntity,
 	domain.CodeProsodyUnknownReading: http.StatusUnprocessableEntity,

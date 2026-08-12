@@ -44,6 +44,8 @@ const (
 	CodeCannotReportSelf ErrorCode = "CANNOT_REPORT_SELF"
 	// CodeAlreadyReported は同一投稿への重複通報（409）。
 	CodeAlreadyReported ErrorCode = "ALREADY_REPORTED"
+	// CodeAlreadyHandled は対応済みの通報をもう一度処理しようとした（409）。
+	CodeAlreadyHandled ErrorCode = "ALREADY_HANDLED"
 	// CodeProsodyHacho は判定が破調（422）。
 	//
 	// 形式は正しく、内容が業務ルールを満たさない。400 にすると
@@ -167,6 +169,14 @@ var (
 	ErrCannotReportSelf = &Error{
 		Code:    CodeCannotReportSelf,
 		Message: "自分の投稿は通報できません",
+	}
+	// ErrAlreadyHandled は対応済みの通報をもう一度処理しようとした。
+	//
+	// **黙って成功にしない。** 別の運営が先に処理した可能性があり、
+	// 気づかないまま二重に判断することになる。
+	ErrAlreadyHandled = &Error{
+		Code:    CodeAlreadyHandled,
+		Message: "この通報はすでに処理されています",
 	}
 	// ErrAlreadyReported は同一投稿への重複通報。
 	ErrAlreadyReported = &Error{
