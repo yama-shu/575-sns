@@ -50,6 +50,24 @@ func newServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *atomi
 	return server, &calls
 }
 
+// waitForCalls は呼び出し回数が want になるまで待つ。
+//
+// **数えるのはサーバのハンドラ、待つのはクライアントである。**
+// リクエストが送られていても、ハンドラが動いて加算するより先に
+// クライアントがタイムアウトで諦めると、その時点ではまだ増えていない。
+// 返った直後に読むと不定期に落ちる（#69）。
+func waitForCalls(t *testing.T, calls *atomic.Int32, want int32) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if calls.Load() == want {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatalf("呼び出し回数が %d にならない: calls=%d", want, calls.Load())
+}
+
 // slowHandler は d だけ待ってから応答する。
 //
 // **r.Context().Done() で打ち切らない。** 打ち切りを待つと、
@@ -234,9 +252,9 @@ func TestAnalyzeTimeoutAppliesPerAttempt(t *testing.T) {
 	})
 
 	_, _ = client.Analyze(context.Background(), "本文")
-	if calls.Load() != 2 {
-		t.Errorf("タイムアウト後にリトライしていない: calls=%d", calls.Load())
-	}
+
+	// タイムアウトで諦めた側から見ると、2回目の到達はまだ記録されていないことがある。
+	waitForCalls(t, calls, 2)
 }
 
 // 到達できない場合は PROSODY_UNAVAILABLE になること。
@@ -349,6 +367,12 @@ func TestAnalyzeDoesNotRetryAfterCancel(t *testing.T) {
 	}()
 	_, _ = client.Analyze(ctx, "本文")
 
+	// まず1回目が届いたことを確かめる。中断した側から見ると、
+	// 記録されるのが Analyze の戻りより後になることがある。
+	waitForCalls(t, calls, 1)
+	// そのうえで増えないことを見る。リトライが起きるならこの間に届く
+	// （RetryDelay は 1ms + 揺らぎ）。
+	time.Sleep(50 * time.Millisecond)
 	if calls.Load() != 1 {
 		t.Errorf("中断後にリトライした: calls=%d", calls.Load())
 	}
