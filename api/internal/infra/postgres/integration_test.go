@@ -2613,3 +2613,65 @@ func TestRelationListQueryUsesIndex(t *testing.T) {
 		})
 	}
 }
+
+// ブロック中一覧から、ブロックし返してきた相手が消えないこと。
+//
+// **消えると解除できなくなる。** この一覧は自分が行った操作の記録であり、
+// 相手の状態で見えなくなってはならない（#71 で実際に踏んだ）。
+func TestBlockingListKeepsMutualBlocks(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	blocks := postgres.NewBlockRepository(pool)
+
+	me, err := users.Create(ctx, newUser("me"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	mutual, err := users.Create(ctx, newUser("mutual"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	suspended, err := users.Create(ctx, newUser("suspended"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	// 互いにブロックしている。
+	if err := blocks.Block(ctx, me.ID, mutual.ID); err != nil {
+		t.Fatalf("ブロックできない: %v", err)
+	}
+	if err := blocks.Block(ctx, mutual.ID, me.ID); err != nil {
+		t.Fatalf("ブロックできない: %v", err)
+	}
+	// 利用停止になった相手もブロックしている。
+	if err := blocks.Block(ctx, me.ID, suspended.ID); err != nil {
+		t.Fatalf("ブロックできない: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE users SET status = 'suspended' WHERE id = $1`, suspended.ID); err != nil {
+		t.Fatalf("状態を変えられない: %v", err)
+	}
+
+	limit := 20
+	items, err := postgres.NewRelationListRepository(pool).List(ctx, domain.RelationListQuery{
+		Kind: domain.RelationBlocking, OwnerID: me.ID, ViewerID: &me.ID, Limit: &limit,
+	})
+	if err != nil {
+		t.Fatalf("取得できない: %v", err)
+	}
+
+	got := map[string]bool{}
+	for _, item := range items {
+		got[item.User.Handle] = true
+	}
+	if !got["mutual"] {
+		t.Error("ブロックし返してきた相手が消えている")
+	}
+	if !got["suspended"] {
+		t.Error("利用停止になった相手が消えている")
+	}
+}

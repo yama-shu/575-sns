@@ -77,7 +77,11 @@ type RelationList struct {
 type RelationListRepository interface {
 	// List は一覧を返す。
 	//
-	// 閲覧者をブロックしている相手、利用停止・退会した相手は含めない。
-	// 一覧に出しても開けば 404 になるためである（#58 の扱いに揃える）。
+	// フォロー中・フォロワーからは、閲覧者をブロックしている相手と
+	// 利用停止・退会した相手を除く。一覧に出しても開けば 404 になるためである
+	// （#58 の扱いに揃える）。
+	//
+	// **ブロック中一覧では除かない。** 自分が行った操作の記録であり、
+	// 相手の状態で消えると解除できなくなる（#71）。
 	List(ctx context.Context, q RelationListQuery) ([]RelationListItem, error)
 }
