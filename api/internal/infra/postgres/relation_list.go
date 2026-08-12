@@ -72,13 +72,20 @@ var listQueries = map[domain.RelationListKind]string{
 		ORDER BY u.id DESC
 		LIMIT $4`,
 
+	// **ブロック中一覧には visibleToViewer を掛けない。**
+	//
+	// この一覧は「自分がブロックした相手」を管理するための画面である（S-11）。
+	// 相手がこちらをブロックし返していると visibleToViewer で消えてしまい、
+	// **解除する手段が無くなる**。#58 がプロフィールを 404 にしなかったのと同じ理由。
+	//
+	// 利用停止・退会した相手も残す。並んでいるのは自分が行った操作の記録であり、
+	// 相手の状態で消える方が説明がつかない。
 	domain.RelationBlocking: `
 		SELECT ` + relationListColumns + `
 		FROM blocks b
 		JOIN users u ON u.id = b.blocked_id
 		WHERE b.blocker_id = $1
 		  AND ($3::bigint = 0 OR u.id < $3)
-		  AND ` + visibleToViewer + `
 		ORDER BY u.id DESC
 		LIMIT $4`,
 }
