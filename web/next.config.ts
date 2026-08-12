@@ -15,7 +15,12 @@ const nextConfig: NextConfig = {
    * ユーザーページに吸われる形になり、画面を足すたびに衝突を気にすることになる。
    */
   async rewrites() {
-    return [{ source: "/@:handle", destination: "/users/:handle" }];
+    return [
+      { source: "/@:handle", destination: "/users/:handle" },
+      // **下の階層は自動では届かない。** 経路ごとに書く（#71）。
+      { source: "/@:handle/following", destination: "/users/:handle/following" },
+      { source: "/@:handle/followers", destination: "/users/:handle/followers" },
+    ];
   },
 };
 

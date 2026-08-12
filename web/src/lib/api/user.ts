@@ -89,3 +89,31 @@ export function reportPost(
     body: comment === "" ? { reason } : { reason, comment },
   });
 }
+
+export type RelationList = components["schemas"]["RelationList"];
+export type RelationUser = components["schemas"]["RelationUser"];
+
+/** 関係の一覧の種類。`/me/blocks` だけ経路の形が違う。 */
+export type RelationKind = "following" | "followers" | "blocks";
+
+/**
+ * 関係の一覧を取得する。
+ *
+ * `handle` はフォロー中・フォロワーのときだけ使う。
+ * ブロック中は本人の一覧しか無いため、識別名を取らない。
+ */
+export function fetchRelationList(
+  kind: RelationKind,
+  handle: string,
+  cursor?: string,
+  limit = 20,
+): Promise<ApiResult<RelationList>> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (cursor) query.set("cursor", cursor);
+
+  const path =
+    kind === "blocks"
+      ? `/me/blocks?${query}`
+      : `/users/${encodeURIComponent(handle)}/${kind}?${query}`;
+  return callApi<RelationList>(path);
+}
