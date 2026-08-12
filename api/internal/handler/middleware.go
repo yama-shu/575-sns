@@ -29,6 +29,28 @@ func RequireAuth(auth *usecase.Auth) echo.MiddlewareFunc {
 	}
 }
 
+// RequireAdmin は運営だけを通す。
+//
+// # 運営でなければ 404 を返す
+//
+// **403 を返さない。** 403 は「その経路は存在するが、あなたには権限が無い」と
+// 伝えることになり、運営向けの経路があること自体を教える。
+//
+// 未ログイン・一般利用者・存在しない経路を、外から区別できないようにする。
+// BR-10 が「見えないものの存在を教えない」としているのと同じ考え方である。
+func RequireAdmin(auth *usecase.Auth) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			user, err := authenticate(c, auth)
+			if err != nil || !user.IsAdmin {
+				return Respond(c, domain.ErrNotFound)
+			}
+			c.Set(currentUserKey, user)
+			return next(c)
+		}
+	}
+}
+
 // OptionalAuth はログインしていれば利用者を載せ、していなくても通す。
 //
 // 未ログインでも閲覧できる画面（全体タイムライン・投稿詳細・ユーザーページ）で使う。
