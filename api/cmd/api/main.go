@@ -104,6 +104,12 @@ func run() error {
 	followHandler := handler.NewFollow(usecase.NewFollow(
 		postgres.NewUserRepository(pool), postgres.NewFollowRepository(pool),
 	))
+	relationListHandler := handler.NewRelationList(usecase.NewRelationList(
+		postgres.NewUserRepository(pool),
+		postgres.NewRelationListRepository(pool),
+		blockRepo,
+		postgres.NewFollowRepository(pool),
+	))
 	profileHandler := handler.NewProfile(usecase.NewProfile(
 		postgres.NewUserRepository(pool),
 		postgres.NewProfileRepository(pool),
@@ -131,6 +137,10 @@ func run() error {
 	// フォロー中・ブロック中の状態と liked_by_me が返るよう、利用者を載せる。
 	v1.GET("/users/:handle", profileHandler.Get, handler.OptionalAuth(authUsecase))
 	v1.GET("/users/:handle/posts", profileHandler.Posts, handler.OptionalAuth(authUsecase))
+	v1.GET("/users/:handle/following", relationListHandler.Following, handler.OptionalAuth(authUsecase))
+	v1.GET("/users/:handle/followers", relationListHandler.Followers, handler.OptionalAuth(authUsecase))
+	// ブロック中一覧は本人だけ。誰をブロックしたかは他人に見せない。
+	v1.GET("/me/blocks", relationListHandler.Blocking, handler.RequireAuth(authUsecase))
 	v1.PUT("/users/:handle/follow", followHandler.Follow, handler.RequireAuth(authUsecase))
 	v1.DELETE("/users/:handle/follow", followHandler.Unfollow, handler.RequireAuth(authUsecase))
 	v1.POST("/posts/:id/report", moderationHandler.Report, handler.RequireAuth(authUsecase))
