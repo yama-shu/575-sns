@@ -118,6 +118,8 @@ func run() error {
 		blockRepo,
 	))
 
+	adminHandler := handler.NewAdmin(usecase.NewAdmin(postgres.NewAdminRepository(pool), time.Now))
+
 	e.GET("/healthz", health.Healthz)
 	e.GET("/readyz", health.Readyz)
 
@@ -141,6 +143,11 @@ func run() error {
 	v1.GET("/users/:handle/followers", relationListHandler.Followers, handler.OptionalAuth(authUsecase))
 	// ブロック中一覧は本人だけ。誰をブロックしたかは他人に見せない。
 	v1.GET("/me/blocks", relationListHandler.Blocking, handler.RequireAuth(authUsecase))
+	// 運営向け。**運営でなければ 404 を返す**（存在を教えない）。
+	admin := v1.Group("/admin", handler.RequireAdmin(authUsecase))
+	admin.GET("/reports", adminHandler.Reports)
+	admin.POST("/reports/:id/resolve", adminHandler.Resolve)
+	admin.POST("/reports/:id/reject", adminHandler.Reject)
 	v1.PUT("/users/:handle/follow", followHandler.Follow, handler.RequireAuth(authUsecase))
 	v1.DELETE("/users/:handle/follow", followHandler.Unfollow, handler.RequireAuth(authUsecase))
 	v1.POST("/posts/:id/report", moderationHandler.Report, handler.RequireAuth(authUsecase))
