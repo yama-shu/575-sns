@@ -47,6 +47,10 @@
   color: var(--color-muted);
 }
 
+.countLink {
+  color: inherit;
+}
+
 .count dd {
   margin: 0;
   font-weight: 700;

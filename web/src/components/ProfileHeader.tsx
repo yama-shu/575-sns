@@ -35,12 +35,21 @@ export function ProfileHeader({ profile, isMine, signedIn, path }: Props) {
           <dt>句</dt>
           <dd>{profile.post_count}</dd>
         </div>
+        {/* 数から一覧へ行けるようにする。数字のままでは開けない。 */}
         <div className={styles.count}>
-          <dt>フォロー</dt>
+          <dt>
+            <Link className={styles.countLink} href={`${path}/following`}>
+              フォロー
+            </Link>
+          </dt>
           <dd>{profile.following_count}</dd>
         </div>
         <div className={styles.count}>
-          <dt>フォロワー</dt>
+          <dt>
+            <Link className={styles.countLink} href={`${path}/followers`}>
+              フォロワー
+            </Link>
+          </dt>
           <dd>{profile.follower_count}</dd>
         </div>
       </dl>
