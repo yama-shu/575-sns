@@ -45,7 +45,8 @@ func (r *SessionRepository) FindByID(
 	const query = `
 		SELECT s.id, s.user_id, s.expires_at, s.created_at, s.last_accessed_at,
 		       u.id, u.handle, u.email, u.password_hash, u.display_name,
-		       COALESCE(u.bio, ''), COALESCE(u.avatar_url, ''), u.status, u.created_at, u.updated_at
+		       COALESCE(u.bio, ''), COALESCE(u.avatar_url, ''), u.status, u.is_admin,
+		       u.created_at, u.updated_at
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
 		WHERE s.id = $1`
@@ -55,7 +56,7 @@ func (r *SessionRepository) FindByID(
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&session.ID, &session.UserID, &session.ExpiresAt, &session.CreatedAt, &session.LastAccessedAt,
 		&user.ID, &user.Handle, &user.Email, &user.PasswordHash, &user.DisplayName,
-		&user.Bio, &user.AvatarURL, &user.Status, &user.CreatedAt, &user.UpdatedAt,
+		&user.Bio, &user.AvatarURL, &user.Status, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

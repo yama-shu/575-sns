@@ -41,7 +41,7 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) (*domain
 		INSERT INTO users (handle, email, password_hash, display_name, status)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, handle, email, password_hash, display_name,
-		          COALESCE(bio, ''), COALESCE(avatar_url, ''), status, created_at, updated_at`
+		          COALESCE(bio, ''), COALESCE(avatar_url, ''), status, is_admin, created_at, updated_at`
 
 	var created domain.User
 	err := r.pool.QueryRow(ctx, query,
@@ -49,7 +49,7 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) (*domain
 	).Scan(
 		&created.ID, &created.Handle, &created.Email, &created.PasswordHash,
 		&created.DisplayName, &created.Bio, &created.AvatarURL,
-		&created.Status, &created.CreatedAt, &created.UpdatedAt,
+		&created.Status, &created.IsAdmin, &created.CreatedAt, &created.UpdatedAt,
 	)
 	if err != nil {
 		return nil, translateUniqueViolation(err)
@@ -72,13 +72,13 @@ func (r *UserRepository) UpdateProfile(
 		SET display_name = $2, bio = $3, updated_at = now()
 		WHERE id = $1 AND status = 'active'
 		RETURNING id, handle, email, password_hash, display_name,
-		          COALESCE(bio, ''), COALESCE(avatar_url, ''), status, created_at, updated_at`
+		          COALESCE(bio, ''), COALESCE(avatar_url, ''), status, is_admin, created_at, updated_at`
 
 	var updated domain.User
 	err := r.pool.QueryRow(ctx, query, userID, displayName, bio).Scan(
 		&updated.ID, &updated.Handle, &updated.Email, &updated.PasswordHash,
 		&updated.DisplayName, &updated.Bio, &updated.AvatarURL,
-		&updated.Status, &updated.CreatedAt, &updated.UpdatedAt,
+		&updated.Status, &updated.IsAdmin, &updated.CreatedAt, &updated.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// 利用停止・退会済みは更新させない。存在しない ID と区別しない。
@@ -94,7 +94,7 @@ func (r *UserRepository) UpdateProfile(
 func (r *UserRepository) FindByID(ctx context.Context, id int64) (*domain.User, error) {
 	const query = `
 		SELECT id, handle, email, password_hash, display_name,
-		       COALESCE(bio, ''), COALESCE(avatar_url, ''), status, created_at, updated_at
+		       COALESCE(bio, ''), COALESCE(avatar_url, ''), status, is_admin, created_at, updated_at
 		FROM users WHERE id = $1`
 	return r.queryOne(ctx, query, id)
 }
@@ -103,7 +103,7 @@ func (r *UserRepository) FindByID(ctx context.Context, id int64) (*domain.User, 
 func (r *UserRepository) FindByHandle(ctx context.Context, handle string) (*domain.User, error) {
 	const query = `
 		SELECT id, handle, email, password_hash, display_name,
-		       COALESCE(bio, ''), COALESCE(avatar_url, ''), status, created_at, updated_at
+		       COALESCE(bio, ''), COALESCE(avatar_url, ''), status, is_admin, created_at, updated_at
 		FROM users WHERE handle = $1`
 	return r.queryOne(ctx, query, handle)
 }
@@ -123,7 +123,7 @@ func (r *UserRepository) queryOne(ctx context.Context, query string, arg any) (*
 	err := r.pool.QueryRow(ctx, query, arg).Scan(
 		&user.ID, &user.Handle, &user.Email, &user.PasswordHash,
 		&user.DisplayName, &user.Bio, &user.AvatarURL,
-		&user.Status, &user.CreatedAt, &user.UpdatedAt,
+		&user.Status, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
