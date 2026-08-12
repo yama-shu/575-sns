@@ -1,0 +1,83 @@
+/* 利用者の一覧（S-05 / S-06 / S-11）。 */
+
+.list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: var(--space) 0;
+}
+
+/* 1件を丸ごとリンクにする。名前だけを的にすると押しにくい。 */
+.item {
+  display: grid;
+  gap: 2px;
+  padding: 12px var(--space);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  text-decoration: none;
+}
+
+.item:hover {
+  border-color: var(--color-accent);
+}
+
+.displayName {
+  font-weight: 600;
+}
+
+.handle {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.bio {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  /* 長い自己紹介で一覧が伸びないようにする。 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more {
+  display: grid;
+  place-items: center;
+  padding: var(--space) 0;
+}
+
+.moreButton {
+  font-size: 0.9rem;
+  padding: 10px 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  text-decoration: none;
+}
+
+.end {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: var(--space) 0;
+}
+
+.empty {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  padding: calc(var(--space) * 2) var(--space);
+  text-align: center;
+  color: var(--color-muted);
+  display: grid;
+  gap: 8px;
+  margin-top: var(--space);
+}
+
+.emptyTitle {
+  color: var(--color-fg);
+  font-weight: 600;
+}
+
+.emptyHint {
+  font-size: 0.9rem;
+}
