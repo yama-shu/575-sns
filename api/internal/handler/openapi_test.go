@@ -214,6 +214,20 @@ func TestResponsesConformToSpec(t *testing.T) {
 		assertConforms(t, doc, http.MethodPatch, "/me/profile", "200", body)
 	})
 
+	t.Run("GET /users/{handle}/following の 200", func(t *testing.T) {
+		repo := &stubRelationListRepo{items: []domain.RelationListItem{listedUser()}}
+		_, body := callRelationList(t, "/api/v1/users/yamada/following", "yamada",
+			repo, usersWith(profileOwner()), nil, (*handler.RelationList).Following)
+		assertConforms(t, doc, http.MethodGet, "/users/{handle}/following", "200", body)
+	})
+
+	t.Run("GET /me/blocks の 200", func(t *testing.T) {
+		repo := &stubRelationListRepo{items: []domain.RelationListItem{listedUser()}}
+		_, body := callRelationList(t, "/api/v1/me/blocks", "",
+			repo, usersWith(profileOwner()), profileOwner(), (*handler.RelationList).Blocking)
+		assertConforms(t, doc, http.MethodGet, "/me/blocks", "200", body)
+	})
+
 	t.Run("GET /users/{handle}/posts の 200", func(t *testing.T) {
 		timelines := &stubUserTimelineRepo{items: []domain.TimelineItem{
 			{Post: publishedPost(), Author: profileOwner()},

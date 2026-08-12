@@ -349,6 +349,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/{handle}/following": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 利用者の識別名 */
+                handle: components["parameters"]["Handle"];
+            };
+            cookie?: never;
+        };
+        /**
+         * フォロー中の一覧を取得する
+         * @description ログインは不要。ログイン済みなら各項目に `following` が返る。
+         *
+         *     **閲覧者から見えない相手を含めない。** 相手が閲覧者をブロックしている場合と、
+         *     利用停止・退会した利用者は一覧に出ない。出しても開けば 404 になるためである。
+         *
+         */
+        get: operations["getFollowing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{handle}/followers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 利用者の識別名 */
+                handle: components["parameters"]["Handle"];
+            };
+            cookie?: never;
+        };
+        /**
+         * フォロワーの一覧を取得する
+         * @description ログインは不要。除外の規則はフォロー中の一覧と同じ。
+         *
+         */
+        get: operations["getFollowers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/blocks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ブロック中の一覧を取得する
+         * @description **本人だけが見られる。** 誰をブロックしたかは他人に見せない。
+         *
+         */
+        get: operations["getBlocking"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{handle}/follow": {
         parameters: {
             query?: never;
@@ -508,6 +580,22 @@ export interface components {
             display_name: string;
             bio: string;
             avatar_url?: string;
+        };
+        /** @description 一覧に出す1人。**プロフィールと同じ形にしない。**
+         *     一覧では投稿数などを数えない。
+         *      */
+        RelationUser: {
+            handle: string;
+            display_name: string;
+            bio?: string;
+            avatar_url?: string;
+            /** @description 閲覧者がこの相手をフォローしているか。未ログインなら false */
+            following: boolean;
+        };
+        RelationList: {
+            items: components["schemas"]["RelationUser"][];
+            /** @description 続きが無ければ null */
+            next_cursor: string | null;
         };
         Profile: {
             handle: string;
@@ -1132,6 +1220,93 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getFollowing: {
+        parameters: {
+            query?: {
+                /** @description この ID より前を取得する。省略すると最新から */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 取得件数 */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                /** @description 利用者の識別名 */
+                handle: components["parameters"]["Handle"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 取得できた */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelationList"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getFollowers: {
+        parameters: {
+            query?: {
+                /** @description この ID より前を取得する。省略すると最新から */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 取得件数 */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                /** @description 利用者の識別名 */
+                handle: components["parameters"]["Handle"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 取得できた */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelationList"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getBlocking: {
+        parameters: {
+            query?: {
+                /** @description この ID より前を取得する。省略すると最新から */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 取得件数 */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 取得できた */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelationList"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
         };
     };
     follow: {

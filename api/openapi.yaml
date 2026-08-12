@@ -427,6 +427,75 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /users/{handle}/following:
+    parameters:
+      - $ref: '#/components/parameters/Handle'
+    get:
+      tags: [ユーザー]
+      summary: フォロー中の一覧を取得する
+      description: |
+        ログインは不要。ログイン済みなら各項目に `following` が返る。
+
+        **閲覧者から見えない相手を含めない。** 相手が閲覧者をブロックしている場合と、
+        利用停止・退会した利用者は一覧に出ない。出しても開けば 404 になるためである。
+      operationId: getFollowing
+      # 認証は不要。未ログインでも使える（基本設計 05 §2）。
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 取得できた
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RelationList' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /users/{handle}/followers:
+    parameters:
+      - $ref: '#/components/parameters/Handle'
+    get:
+      tags: [ユーザー]
+      summary: フォロワーの一覧を取得する
+      description: |
+        ログインは不要。除外の規則はフォロー中の一覧と同じ。
+      operationId: getFollowers
+      # 認証は不要。未ログインでも使える（基本設計 05 §2）。
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 取得できた
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RelationList' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /me/blocks:
+    get:
+      tags: [健全性]
+      summary: ブロック中の一覧を取得する
+      description: |
+        **本人だけが見られる。** 誰をブロックしたかは他人に見せない。
+      operationId: getBlocking
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 取得できた
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RelationList' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
   /users/{handle}/follow:
     parameters:
       - $ref: '#/components/parameters/Handle'
@@ -721,6 +790,35 @@ components:
         display_name: { type: string }
         bio: { type: string }
         avatar_url: { type: string }
+
+    RelationUser:
+      type: object
+      additionalProperties: false
+      required: [handle, display_name, following]
+      description: |
+        一覧に出す1人。**プロフィールと同じ形にしない。**
+        一覧では投稿数などを数えない。
+      properties:
+        handle: { type: string }
+        display_name: { type: string }
+        bio: { type: string }
+        avatar_url: { type: string }
+        following:
+          type: boolean
+          description: 閲覧者がこの相手をフォローしているか。未ログインなら false
+
+    RelationList:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/RelationUser' }
+        next_cursor:
+          type: [string, 'null']
+          pattern: '^[0-9]+$'
+          description: 続きが無ければ null
 
     Profile:
       type: object
