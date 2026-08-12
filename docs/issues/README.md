@@ -218,6 +218,7 @@ flowchart LR
 | [0028](0028-feat-profile-edit.md) | `feat` | プロフィール編集を実装する | [#62](https://github.com/yama-shu/575-sns/issues/62) |
 | [0029](0029-feat-report-modal.md) | `feat` | 通報のモーダルを実装する | [#64](https://github.com/yama-shu/575-sns/issues/64) |
 | [0031](0031-feat-relation-list-api.md) | `feat` | フォロー中・フォロワー・ブロック中の一覧を返す API を実装する | [#68](https://github.com/yama-shu/575-sns/issues/68) |
+| [0032](0032-feat-relation-list-screens.md) | `feat` | フォロー中・フォロワー・ブロック中の一覧画面を実装する | [#71](https://github.com/yama-shu/575-sns/issues/71) |
 
 ### MVP 後（起票済みのもの）
 
@@ -302,7 +303,7 @@ flowchart LR
 | 7 | `feat` | プロフィール編集を実装する（[0028](0028-feat-profile-edit.md) / [#62](https://github.com/yama-shu/575-sns/issues/62)） | S-10 |
 | 8 | `feat` | 通報のモーダルを実装する（[0029](0029-feat-report-modal.md) / [#64](https://github.com/yama-shu/575-sns/issues/64)） | S-12 |
 | 9 | `feat` | 一覧を返す API を実装する（[0031](0031-feat-relation-list-api.md) / [#68](https://github.com/yama-shu/575-sns/issues/68)） | S-05 / S-06 / S-11 の前提 |
-| 10 | `feat` | フォロー中一覧・フォロワー一覧・ブロック中一覧の画面を実装する | S-05 / S-06 / S-11 |
+| 10 | `feat` | 一覧の画面を実装する（[0032](0032-feat-relation-list-screens.md) / [#71](https://github.com/yama-shu/575-sns/issues/71)） | S-05 / S-06 / S-11 |
 | 11 | `feat` | 運営向けの通報一覧を実装する | S-13 |
 | 12 | `test` | E2E テストで主要な導線を確認する（[詳細設計 04 §1](../design/detail/04-test-design.md)） | — |
 
