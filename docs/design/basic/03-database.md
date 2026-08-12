@@ -233,12 +233,28 @@ DB 制約の両方で上限を設ける。
 | 6 | posts | `(id DESC) WHERE status='published' AND visibility='public'` | **部分** | 全体タイムライン |
 | 7 | posts | `(author_id, id DESC) WHERE status='published'` | **部分** | フォロー中タイムライン、ユーザーページ |
 | 8 | follows | `(follower_id, followee_id)` | PK | フォロー中タイムライン、フォロー中一覧 |
-| 9 | follows | `(followee_id)` | 通常 | フォロワー一覧 |
+| 9 | follows | `(followee_id, follower_id DESC)` | 通常 | フォロワー一覧、フォロワー数 |
 | 10 | likes | `(user_id, post_id)` | PK | いいね済みかの判定 |
 | 11 | likes | `(post_id)` | 通常 | 投稿へのいいね一覧 |
 | 12 | blocks | `(blocker_id, blocked_id)` | PK | タイムラインからの除外 |
 | 13 | reports | `(reporter_id, post_id)` | UNIQUE | 重複通報の防止 |
 | 14 | reports | `(created_at) WHERE status='pending'` | **部分** | 運営の通報一覧 |
+
+#### #9 に follower_id を含める理由
+
+フォロワー一覧は `followee_id` で絞り、`follower_id` の降順で返す。
+`(followee_id)` だけでは順序が得られず、プランナは順序のために
+`follows_pkey (follower_id, followee_id)` を逆順に走査する計画を選ぶ。
+
+実測（PostgreSQL 18・`follows` 4,003 行・フォロワー3人の利用者）。
+
+| 索引 | `follows` の走査 |
+| --- | ---: |
+| `(followee_id)` のみ | 25 buffers |
+| `(followee_id, follower_id DESC)` | **6 buffers** |
+
+絞り込みと順序を1つの索引で満たす。フォロワー数の数え上げも
+先頭列が一致するため同じ索引で足りる。
 
 ### 部分インデックスを使う理由（#6・#7・#14）
 
