@@ -47,6 +47,8 @@ tags:
     description: いいね・フォロー
   - name: 健全性
     description: 通報・ブロック
+  - name: 運営
+    description: 通報の確認と投稿の非表示化。**運営でなければ 404**
 
 paths:
   /auth/signup:
@@ -476,6 +478,76 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /admin/reports:
+    get:
+      tags: [運営]
+      summary: 未対応の通報一覧を取得する
+      description: |
+        **古い順に返す。** 待たせている順に処理するためである。
+        タイムラインと並びもカーソルの向きも逆になる。
+
+        判断に要るため、通報された投稿の本文と投稿者を含める。
+
+        **運営でなければ 404 を返す。** 403 にすると、運営向けの経路が
+        存在することを教えることになる。未ログインも同じ。
+      operationId: getPendingReports
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 取得できた
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PendingReports' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/reports/{id}/resolve:
+    parameters:
+      - $ref: '#/components/parameters/ReportId'
+    post:
+      tags: [運営]
+      summary: 通報に対応する（投稿を非表示にする）
+      description: |
+        投稿を `hidden` にし、通報を対応済みにする。**1トランザクションで行う。**
+
+        **同じ投稿への未対応の通報もまとめて閉じる**（基本設計 02 §4）。
+        1件だけ閉じると、すでに非表示にした投稿の通報が一覧に残り続ける。
+      operationId: resolveReport
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: 対応した }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: すでに処理済み
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /admin/reports/{id}/reject:
+    parameters:
+      - $ref: '#/components/parameters/ReportId'
+    post:
+      tags: [運営]
+      summary: 通報を却下する
+      description: |
+        通報を却下する。**投稿は変えない。**
+        同じ投稿への未対応の通報もまとめて却下する。
+      operationId: rejectReport
+      security: [{ sessionCookie: [] }]
+      responses:
+        '204': { description: 却下した }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: すでに処理済み
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
   /me/blocks:
     get:
       tags: [健全性]
@@ -602,6 +674,12 @@ components:
         `HttpOnly` / `SameSite=Lax` を付ける。
 
   parameters:
+    ReportId:
+      name: id
+      in: path
+      required: true
+      description: 通報の ID
+      schema: { type: string, pattern: '^[0-9]+$' }
     PostId:
       name: id
       in: path
@@ -790,6 +868,52 @@ components:
         display_name: { type: string }
         bio: { type: string }
         avatar_url: { type: string }
+
+    PendingReport:
+      type: object
+      additionalProperties: false
+      required: [id, reason, created_at, post, reporter]
+      properties:
+        id: { type: string, pattern: '^[0-9]+$' }
+        reason: { $ref: '#/components/schemas/ReportReason' }
+        comment: { type: string }
+        created_at: { type: string, format: date-time }
+        post:
+          type: object
+          additionalProperties: false
+          required: [id, body, segments, verdict, created_at, author]
+          description: 判断に要るため本文を含める
+          properties:
+            id: { type: string, pattern: '^[0-9]+$' }
+            body: { type: string }
+            segments:
+              type: array
+              items: { type: string }
+            verdict: { $ref: '#/components/schemas/Verdict' }
+            created_at: { type: string, format: date-time }
+            author: { $ref: '#/components/schemas/ReportUser' }
+        reporter: { $ref: '#/components/schemas/ReportUser' }
+
+    ReportUser:
+      type: object
+      additionalProperties: false
+      required: [handle, display_name]
+      properties:
+        handle: { type: string }
+        display_name: { type: string }
+
+    PendingReports:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PendingReport' }
+        next_cursor:
+          type: [string, 'null']
+          pattern: '^[0-9]+$'
+          description: 続きが無ければ null
 
     RelationUser:
       type: object

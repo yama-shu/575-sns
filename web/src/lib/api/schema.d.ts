@@ -400,6 +400,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 未対応の通報一覧を取得する
+         * @description **古い順に返す。** 待たせている順に処理するためである。
+         *     タイムラインと並びもカーソルの向きも逆になる。
+         *
+         *     判断に要るため、通報された投稿の本文と投稿者を含める。
+         *
+         *     **運営でなければ 404 を返す。** 403 にすると、運営向けの経路が
+         *     存在することを教えることになる。未ログインも同じ。
+         *
+         */
+        get: operations["getPendingReports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/reports/{id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 通報の ID */
+                id: components["parameters"]["ReportId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 通報に対応する（投稿を非表示にする）
+         * @description 投稿を `hidden` にし、通報を対応済みにする。**1トランザクションで行う。**
+         *
+         *     **同じ投稿への未対応の通報もまとめて閉じる**（基本設計 02 §4）。
+         *     1件だけ閉じると、すでに非表示にした投稿の通報が一覧に残り続ける。
+         *
+         */
+        post: operations["resolveReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/reports/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 通報の ID */
+                id: components["parameters"]["ReportId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 通報を却下する
+         * @description 通報を却下する。**投稿は変えない。**
+         *     同じ投稿への未対応の通報もまとめて却下する。
+         *
+         */
+        post: operations["rejectReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/blocks": {
         parameters: {
             query?: never;
@@ -581,6 +660,33 @@ export interface components {
             bio: string;
             avatar_url?: string;
         };
+        PendingReport: {
+            id: string;
+            reason: components["schemas"]["ReportReason"];
+            comment?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** @description 判断に要るため本文を含める */
+            post: {
+                id: string;
+                body: string;
+                segments: string[];
+                verdict: components["schemas"]["Verdict"];
+                /** Format: date-time */
+                created_at: string;
+                author: components["schemas"]["ReportUser"];
+            };
+            reporter: components["schemas"]["ReportUser"];
+        };
+        ReportUser: {
+            handle: string;
+            display_name: string;
+        };
+        PendingReports: {
+            items: components["schemas"]["PendingReport"][];
+            /** @description 続きが無ければ null */
+            next_cursor: string | null;
+        };
         /** @description 一覧に出す1人。**プロフィールと同じ形にしない。**
          *     一覧では投稿数などを数えない。
          *      */
@@ -752,6 +858,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description 通報の ID */
+        ReportId: string;
         /** @description 投稿の ID */
         PostId: string;
         /** @description 利用者の識別名 */
@@ -1280,6 +1388,97 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getPendingReports: {
+        parameters: {
+            query?: {
+                /** @description この ID より前を取得する。省略すると最新から */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description 取得件数 */
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 取得できた */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingReports"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    resolveReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 通報の ID */
+                id: components["parameters"]["ReportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 対応した */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            404: components["responses"]["NotFound"];
+            /** @description すでに処理済み */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    rejectReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 通報の ID */
+                id: components["parameters"]["ReportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 却下した */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            404: components["responses"]["NotFound"];
+            /** @description すでに処理済み */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getBlocking: {

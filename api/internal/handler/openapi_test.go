@@ -214,6 +214,13 @@ func TestResponsesConformToSpec(t *testing.T) {
 		assertConforms(t, doc, http.MethodPatch, "/me/profile", "200", body)
 	})
 
+	t.Run("GET /admin/reports の 200", func(t *testing.T) {
+		repo := &stubAdminRepo{items: []domain.PendingReport{reportedItem()}}
+		_, body := callAdmin(t, http.MethodGet, "/api/v1/admin/reports", "",
+			repo, adminOwner(), (*handler.Admin).Reports)
+		assertConforms(t, doc, http.MethodGet, "/admin/reports", "200", body)
+	})
+
 	t.Run("GET /users/{handle}/following の 200", func(t *testing.T) {
 		repo := &stubRelationListRepo{items: []domain.RelationListItem{listedUser()}}
 		_, body := callRelationList(t, "/api/v1/users/yamada/following", "yamada",
