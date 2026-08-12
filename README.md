@@ -532,6 +532,37 @@ curl -s "localhost:8080/api/v1/users/hanako/posts?limit=20" | jq -c '{count:(.it
 [BR-09](docs/design/basic/02-domain-model.md#関係に関するルール) が隠すよう求めているのは投稿であり、
 プロフィールそのものではありません。
 
+### 関係の一覧を試す
+
+```bash
+# フォロワー一覧（ログイン不要）
+curl -s localhost:8080/api/v1/users/hanako/followers | jq -c '[.items[].handle]'
+# ["ken","aoi","tarou"]
+
+# ログイン済みなら、その相手をフォローしているかが返る
+curl -s -b /tmp/cookies localhost:8080/api/v1/users/hanako/followers \
+  | jq -c '[.items[] | {handle, following}]'
+
+# ブロック中一覧は本人だけ
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8080/api/v1/me/blocks   # 401
+curl -s -b /tmp/cookies localhost:8080/api/v1/me/blocks | jq -c '[.items[].handle]'
+```
+
+**閲覧者から見えない相手を一覧に出しません。** 相手が閲覧者をブロックしている場合と、
+利用停止・退会した利用者は除きます。出しても開けば 404 になるためです
+（[#58](https://github.com/yama-shu/575-sns/issues/58) でプロフィールを 404 にしています）。
+
+```bash
+# aoi が ken をブロックしている場合
+curl -s -b /tmp/ken localhost:8080/api/v1/users/hanako/followers | jq -c '[.items[].handle]'
+# ["ken","tarou"]          ← aoi が消える
+curl -s          localhost:8080/api/v1/users/hanako/followers | jq -c '[.items[].handle]'
+# ["ken","aoi","tarou"]    ← 未ログインなら残る
+```
+
+カーソルは**相手の利用者 ID** です。`follows` と `blocks` に `id` 列は無く、
+`created_at` は同時刻の並びが定まらないためです。
+
 ### いいねを試す
 
 ```bash
