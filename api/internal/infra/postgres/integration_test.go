@@ -2312,3 +2312,304 @@ func TestUserRepositoryUpdateProfileRejectsInactive(t *testing.T) {
 		t.Fatalf("404 にならない: %v", err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// 関係の一覧（S-05 / S-06 / S-11）
+// ---------------------------------------------------------------------------
+
+func TestRelationListRepository(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	follows := postgres.NewFollowRepository(pool)
+	blocks := postgres.NewBlockRepository(pool)
+
+	me, err := users.Create(ctx, newUser("me"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	owner, err := users.Create(ctx, newUser("owner"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	friend, err := users.Create(ctx, newUser("friend"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	hostile, err := users.Create(ctx, newUser("hostile"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	gone, err := users.Create(ctx, newUser("gone"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE users SET status = 'suspended' WHERE id = $1`, gone.ID); err != nil {
+		t.Fatalf("状態を変えられない: %v", err)
+	}
+
+	// owner が friend / hostile / gone をフォローしている。
+	for _, id := range []int64{friend.ID, hostile.ID, gone.ID} {
+		if err := follows.Follow(ctx, owner.ID, id); err != nil {
+			t.Fatalf("フォローできない: %v", err)
+		}
+	}
+	// me は friend をフォローしている（一覧の following に出る）。
+	if err := follows.Follow(ctx, me.ID, friend.ID); err != nil {
+		t.Fatalf("フォローできない: %v", err)
+	}
+	// hostile は me をブロックしている。
+	if err := blocks.Block(ctx, hostile.ID, me.ID); err != nil {
+		t.Fatalf("ブロックできない: %v", err)
+	}
+
+	repo := postgres.NewRelationListRepository(pool)
+	limit := 20
+
+	t.Run("見えない相手を一覧から外す", func(t *testing.T) {
+		items, err := repo.List(ctx, domain.RelationListQuery{
+			Kind: domain.RelationFollowing, OwnerID: owner.ID, ViewerID: &me.ID, Limit: &limit,
+		})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+
+		got := map[string]bool{}
+		for _, item := range items {
+			got[item.User.Handle] = true
+		}
+		if !got["friend"] {
+			t.Error("見えるはずの相手が出ない")
+		}
+		// **一覧に出しても開けば 404 になる相手は外す。**
+		if got["hostile"] {
+			t.Error("閲覧者をブロックしている相手が出ている")
+		}
+		if got["gone"] {
+			t.Error("利用停止の相手が出ている")
+		}
+	})
+
+	t.Run("未ログインではブロックで外れない", func(t *testing.T) {
+		items, err := repo.List(ctx, domain.RelationListQuery{
+			Kind: domain.RelationFollowing, OwnerID: owner.ID, Limit: &limit,
+		})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		got := map[string]bool{}
+		for _, item := range items {
+			got[item.User.Handle] = true
+		}
+		if !got["hostile"] {
+			t.Error("未ログインなのにブロックで外れている")
+		}
+		if got["gone"] {
+			t.Error("利用停止の相手が出ている")
+		}
+	})
+
+	t.Run("following が1回のクエリで返る", func(t *testing.T) {
+		items, err := repo.List(ctx, domain.RelationListQuery{
+			Kind: domain.RelationFollowing, OwnerID: owner.ID, ViewerID: &me.ID, Limit: &limit,
+		})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		for _, item := range items {
+			want := item.User.Handle == "friend"
+			if item.Following != want {
+				t.Errorf("%s の following が違う: %v, want %v", item.User.Handle, item.Following, want)
+			}
+		}
+	})
+
+	t.Run("フォロワー一覧", func(t *testing.T) {
+		items, err := repo.List(ctx, domain.RelationListQuery{
+			Kind: domain.RelationFollowers, OwnerID: friend.ID, Limit: &limit,
+		})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		got := map[string]bool{}
+		for _, item := range items {
+			got[item.User.Handle] = true
+		}
+		if !got["owner"] || !got["me"] {
+			t.Errorf("フォロワーが揃わない: %v", got)
+		}
+	})
+
+	t.Run("ブロック中一覧", func(t *testing.T) {
+		items, err := repo.List(ctx, domain.RelationListQuery{
+			Kind: domain.RelationBlocking, OwnerID: hostile.ID, ViewerID: &hostile.ID, Limit: &limit,
+		})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		if len(items) != 1 || items[0].User.Handle != "me" {
+			t.Fatalf("ブロック中の相手が違う: %+v", items)
+		}
+	})
+}
+
+// カーソルで遡れること。重複も欠落も出ないこと。
+func TestRelationListPaginate(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	follows := postgres.NewFollowRepository(pool)
+
+	owner, err := users.Create(ctx, newUser("owner"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	want := make([]int64, 0, 5)
+	for i := range 5 {
+		u, err := users.Create(ctx, newUser(fmt.Sprintf("friend%d", i)))
+		if err != nil {
+			t.Fatalf("登録できない: %v", err)
+		}
+		if err := follows.Follow(ctx, owner.ID, u.ID); err != nil {
+			t.Fatalf("フォローできない: %v", err)
+		}
+		want = append(want, u.ID)
+	}
+
+	repo := postgres.NewRelationListRepository(pool)
+	limit := 2
+	seen := []int64{}
+	cursor := int64(0)
+	for range 4 {
+		items, err := repo.List(ctx, domain.RelationListQuery{
+			Kind: domain.RelationFollowing, OwnerID: owner.ID, Cursor: cursor, Limit: &limit,
+		})
+		if err != nil {
+			t.Fatalf("取得できない: %v", err)
+		}
+		if len(items) == 0 {
+			break
+		}
+		for _, item := range items {
+			seen = append(seen, item.User.ID)
+		}
+		cursor = items[len(items)-1].User.ID
+	}
+
+	if len(seen) != len(want) {
+		t.Fatalf("件数が違う: %d, want %d", len(seen), len(want))
+	}
+	unique := map[int64]bool{}
+	for _, id := range seen {
+		if unique[id] {
+			t.Fatalf("重複している: %d", id)
+		}
+		unique[id] = true
+	}
+	// 利用者 ID の降順で返るため、登録と逆順になる。
+	for i, id := range seen {
+		if id != want[len(want)-1-i] {
+			t.Errorf("%d番目が違う: %d, want %d", i, id, want[len(want)-1-i])
+		}
+	}
+}
+
+// 一覧の実行計画に users / follows の Seq Scan が出ないこと。
+//
+// **行数を増やしてから確認する。** 数行しかないテーブルでは、
+// PostgreSQL は正しくインデックスより Seq Scan を選ぶ（#41 で同じ誤りをした）。
+//
+// **実物のクエリを検査する。** テストに書き写すと、実装を変えたときに
+// 古いクエリを検査し続ける。
+func TestRelationListQueryUsesIndex(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+
+	owner, err := users.Create(ctx, newUser("owner"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	// **閲覧者は owner と別にする。** owner は全員をフォローする役なので、
+	// 閲覧者に使うと「自分が全員をフォローしている」状態で計画を測ることになり、
+	// following の判定が Seq Scan を選ぶ。実運用とかけ離れた条件になる。
+	viewer, err := users.Create(ctx, newUser("viewer"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	// プランナがインデックスを選ぶだけの行数を入れる。
+	// owner を中心に、フォロー・フォロワー・ブロックをそれぞれ作る。
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO users (handle, email, password_hash, display_name, status)
+		SELECT 'u' || i, 'u' || i || '@example.com', '$2a$04$abcdefghijklmnopqrstuv', 'u' || i, 'active'
+		FROM generate_series(1, 3000) AS i`); err != nil {
+		t.Fatalf("利用者を投入できない: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO follows (follower_id, followee_id)
+		SELECT $1, id FROM users WHERE id <> $1`, owner.ID); err != nil {
+		t.Fatalf("フォローを投入できない: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO follows (follower_id, followee_id)
+		SELECT id, $1 FROM users WHERE id <> $1`, owner.ID); err != nil {
+		t.Fatalf("フォロワーを投入できない: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO blocks (blocker_id, blocked_id)
+		SELECT $1, id FROM users WHERE id <> $1 AND id % 3 = 0`, owner.ID); err != nil {
+		t.Fatalf("ブロックを投入できない: %v", err)
+	}
+	// 閲覧者は数人しかフォローしていない。実際の利用者に近い形にする。
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO follows (follower_id, followee_id)
+		SELECT $1, id FROM users WHERE id <> $1 AND id <> $2 ORDER BY id LIMIT 5`,
+		viewer.ID, owner.ID); err != nil {
+		t.Fatalf("フォローを投入できない: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `VACUUM ANALYZE users, follows, blocks`); err != nil {
+		t.Fatalf("統計を更新できない: %v", err)
+	}
+
+	limit := 20
+	for _, kind := range []domain.RelationListKind{
+		domain.RelationFollowing, domain.RelationFollowers, domain.RelationBlocking,
+	} {
+		t.Run(string(kind), func(t *testing.T) {
+			rows, err := pool.Query(ctx, "EXPLAIN "+postgres.RelationListQueryForTest(kind),
+				owner.ID, &viewer.ID, int64(0), limit)
+			if err != nil {
+				t.Fatalf("実行計画を取得できない: %v", err)
+			}
+			defer rows.Close()
+
+			var lines []string
+			for rows.Next() {
+				var line string
+				if err := rows.Scan(&line); err != nil {
+					t.Fatalf("読み取れない: %v", err)
+				}
+				lines = append(lines, line)
+			}
+			plan := strings.Join(lines, "\n")
+
+			for _, table := range []string{"users", "follows", "blocks"} {
+				if strings.Contains(plan, "Seq Scan on "+table) {
+					t.Errorf("%s に Seq Scan が出ている:\n%s", table, plan)
+				}
+			}
+			t.Logf("実行計画:\n%s", plan)
+		})
+	}
+}
