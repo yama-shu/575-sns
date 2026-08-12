@@ -38,8 +38,13 @@ type User struct {
 	Bio          string
 	AvatarURL    string
 	Status       UserStatus
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// IsAdmin は運営かどうか（FR-05-03 / FR-05-04）。
+	//
+	// **付与する API は無い。** 権限を与える経路は壊れたときの被害が最も大きく、
+	// 運用者がひとりである以上、DB を直接更新すれば足りる（#74）。
+	IsAdmin   bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // 入力の上限。DB の制約（基本設計 03 §2）と一致させる。
