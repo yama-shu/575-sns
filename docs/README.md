@@ -23,7 +23,7 @@ flowchart LR
 
 | ドキュメント | 内容 | 状態 |
 | --- | --- | --- |
-| [01-requirements.md](requirements/01-requirements.md) | 背景・コンセプト・ペルソナ・ユースケース・機能要件・非機能要件・用語集・スコープ | ✅ 完了 |
+| [01-requirements.md](requirements/01-requirements.md) | 背景・コンセプト・想定する利用者・ユースケース・機能要件・非機能要件・用語集・スコープ | ✅ 完了 |
 
 ## 2. 基本設計
 
