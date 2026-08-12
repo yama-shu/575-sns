@@ -2675,3 +2675,224 @@ func TestBlockingListKeepsMutualBlocks(t *testing.T) {
 		t.Error("利用停止になった相手が消えている")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// 運営の通報処理（S-13 / FR-05-03）
+// ---------------------------------------------------------------------------
+
+// seedReport は通報を1件作り、その ID を返す。
+func seedReport(t *testing.T, pool *pgxpool.Pool, reporterID, postID int64) int64 {
+	t.Helper()
+	report, err := postgres.NewReportRepository(pool).Create(context.Background(),
+		&domain.Report{
+			ReporterID: reporterID, PostID: postID,
+			Reason: domain.ReportSpam, Status: domain.ReportPending,
+		})
+	if err != nil {
+		t.Fatalf("通報できない: %v", err)
+	}
+	return report.ID
+}
+
+func TestAdminResolveHidesPostAndClosesReports(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	admin, err := users.Create(ctx, newUser("admin"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	author, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	one, err := users.Create(ctx, newUser("one"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	two, err := users.Create(ctx, newUser("two"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	postID := insertPost(t, pool, author.ID, domain.VisibilityPublic)
+	other := insertPost(t, pool, author.ID, domain.VisibilityPublic)
+	first := seedReport(t, pool, one.ID, postID)
+	seedReport(t, pool, two.ID, postID) // 同じ投稿への2件目
+	untouched := seedReport(t, pool, one.ID, other)
+
+	now := time.Now()
+	if err := postgres.NewAdminRepository(pool).Resolve(ctx, first, admin.ID, now); err != nil {
+		t.Fatalf("対応できない: %v", err)
+	}
+
+	// 投稿が非表示になる。
+	var status string
+	if err := pool.QueryRow(ctx, `SELECT status FROM posts WHERE id = $1`, postID).Scan(&status); err != nil {
+		t.Fatalf("投稿を引けない: %v", err)
+	}
+	if status != string(domain.PostHidden) {
+		t.Errorf("投稿が非表示になっていない: %s", status)
+	}
+
+	// **同じ投稿への通報がまとめて閉じる**（基本設計 02 §4）。
+	var pending int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM reports WHERE post_id = $1 AND status = 'pending'`,
+		postID).Scan(&pending); err != nil {
+		t.Fatalf("数えられない: %v", err)
+	}
+	if pending != 0 {
+		t.Errorf("同じ投稿の通報が %d 件残っている", pending)
+	}
+
+	// 対応者と日時が残る。
+	var resolvedBy int64
+	if err := pool.QueryRow(ctx,
+		`SELECT resolved_by FROM reports WHERE id = $1`, first).Scan(&resolvedBy); err != nil {
+		t.Fatalf("引けない: %v", err)
+	}
+	if resolvedBy != admin.ID {
+		t.Errorf("対応者が違う: %d", resolvedBy)
+	}
+
+	// 別の投稿の通報は触らない。
+	var otherStatus string
+	if err := pool.QueryRow(ctx,
+		`SELECT status FROM reports WHERE id = $1`, untouched).Scan(&otherStatus); err != nil {
+		t.Fatalf("引けない: %v", err)
+	}
+	if otherStatus != string(domain.ReportPending) {
+		t.Errorf("関係のない通報が変わっている: %s", otherStatus)
+	}
+}
+
+// 却下は投稿を変えないこと。
+func TestAdminRejectLeavesPost(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	admin, err := users.Create(ctx, newUser("admin"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	author, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	reporter, err := users.Create(ctx, newUser("reporter"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	postID := insertPost(t, pool, author.ID, domain.VisibilityPublic)
+	reportID := seedReport(t, pool, reporter.ID, postID)
+
+	if err := postgres.NewAdminRepository(pool).Reject(ctx, reportID, admin.ID, time.Now()); err != nil {
+		t.Fatalf("却下できない: %v", err)
+	}
+
+	var postStatus, reportStatus string
+	if err := pool.QueryRow(ctx, `SELECT status FROM posts WHERE id = $1`, postID).Scan(&postStatus); err != nil {
+		t.Fatalf("引けない: %v", err)
+	}
+	if postStatus != string(domain.PostPublished) {
+		t.Errorf("却下なのに投稿が変わっている: %s", postStatus)
+	}
+	if err := pool.QueryRow(ctx, `SELECT status FROM reports WHERE id = $1`, reportID).Scan(&reportStatus); err != nil {
+		t.Fatalf("引けない: %v", err)
+	}
+	if reportStatus != string(domain.ReportRejected) {
+		t.Errorf("通報が却下になっていない: %s", reportStatus)
+	}
+}
+
+// 処理済みの通報をもう一度処理すると 409 になること。
+//
+// **黙って成功にしない。** 別の運営が先に処理した可能性があり、
+// 気づかないまま二重に判断することになる。
+func TestAdminRejectsAlreadyHandled(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	admin, err := users.Create(ctx, newUser("admin"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	author, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	reporter, err := users.Create(ctx, newUser("reporter"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+	postID := insertPost(t, pool, author.ID, domain.VisibilityPublic)
+	reportID := seedReport(t, pool, reporter.ID, postID)
+
+	repo := postgres.NewAdminRepository(pool)
+	if err := repo.Resolve(ctx, reportID, admin.ID, time.Now()); err != nil {
+		t.Fatalf("対応できない: %v", err)
+	}
+
+	if err := repo.Resolve(ctx, reportID, admin.ID, time.Now()); !errors.Is(err, domain.ErrAlreadyHandled) {
+		t.Fatalf("409 にならない: %v", err)
+	}
+	if err := repo.Reject(ctx, 999999, admin.ID, time.Now()); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("存在しない通報が 404 にならない: %v", err)
+	}
+}
+
+// 未対応の通報が古い順に返ること。
+func TestAdminPendingReportsAreOldestFirst(t *testing.T) {
+	pool := newPool(t)
+	cleanup(t, pool)
+	defer cleanup(t, pool)
+
+	ctx := context.Background()
+	users := postgres.NewUserRepository(pool)
+	author, err := users.Create(ctx, newUser("author"))
+	if err != nil {
+		t.Fatalf("登録できない: %v", err)
+	}
+
+	want := make([]int64, 0, 3)
+	for i := range 3 {
+		reporter, err := users.Create(ctx, newUser(fmt.Sprintf("reporter%d", i)))
+		if err != nil {
+			t.Fatalf("登録できない: %v", err)
+		}
+		postID := insertPost(t, pool, author.ID, domain.VisibilityPublic)
+		want = append(want, seedReport(t, pool, reporter.ID, postID))
+	}
+
+	limit := 20
+	items, err := postgres.NewAdminRepository(pool).PendingReports(ctx,
+		domain.PendingReportQuery{Limit: &limit})
+	if err != nil {
+		t.Fatalf("取得できない: %v", err)
+	}
+
+	if len(items) != len(want) {
+		t.Fatalf("件数が違う: %d, want %d", len(items), len(want))
+	}
+	// **古い順である。** 待たせている順に処理するため。
+	for i, item := range items {
+		if item.Report.ID != want[i] {
+			t.Errorf("%d番目が違う: %d, want %d", i, item.Report.ID, want[i])
+		}
+	}
+	// 運営が判断できるよう、本文と投稿者が入っていること。
+	if items[0].Post.Body == "" || items[0].Author.Handle == "" || items[0].Reporter.Handle == "" {
+		t.Errorf("判断に要る情報が欠けている: %+v", items[0])
+	}
+}
