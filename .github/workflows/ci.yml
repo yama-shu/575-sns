@@ -42,6 +42,7 @@ jobs:
       prosody: ${{ steps.filter.outputs.prosody }}
       api: ${{ steps.filter.outputs.api }}
       web: ${{ steps.filter.outputs.web }}
+      e2e: ${{ steps.filter.outputs.e2e }}
       services: ${{ steps.matrix.outputs.services }}
     steps:
       - uses: actions/checkout@v7
@@ -67,6 +68,14 @@ jobs:
               - 'web/**'
               # 定義が変われば web の型も変わる。web の検査を走らせる。
               - 'api/openapi.yaml'
+            # E2E は3つのサービスをまたぐ。web の変更だけを見ていると
+            # api や prosody の退行を見逃す。
+            e2e:
+              - *shared
+              - 'e2e/**'
+              - 'prosody/**'
+              - 'api/**'
+              - 'web/**'
 
       - name: イメージビルド対象の一覧をつくる
         id: matrix
@@ -269,6 +278,72 @@ jobs:
         run: npm audit --audit-level=high
 
   # ------------------------------------------------------------------
+  # E2E（db + prosody + api + web をつないだ確認）
+  # ------------------------------------------------------------------
+  e2e:
+    name: E2E
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: 依存を入れる
+        working-directory: e2e
+        run: npm ci
+
+      - name: 型検査
+        working-directory: e2e
+        run: npm run typecheck
+
+      # 使う版はロックファイルに従う。--with-deps でブラウザの実行に必要な
+      # システムライブラリも入れる。
+      - name: ブラウザを入れる
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      # **本番相当のイメージで動かす**（compose.override.yaml を読ませない）。
+      # 開発モードは初回アクセスでコンパイルが走り、判定の往復に数十秒が乗る（#71）。
+      - name: スタックを起動する
+        run: docker compose -f compose.yaml up -d --build --wait
+
+      # api と web は distroless / Node のため compose に healthcheck を持たない。
+      # --wait は「起動した」までしか見ないため、応答するまでここで待つ。
+      - name: web が応答するまで待つ
+        run: |
+          for _ in $(seq 60); do
+            if curl -fsS http://localhost:3000/ > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo '::error::web が応答しません'
+          docker compose -f compose.yaml ps
+          exit 1
+
+      - name: E2E テスト
+        working-directory: e2e
+        run: npm test
+
+      - name: 失敗したときのログを出す
+        if: failure()
+        run: docker compose -f compose.yaml logs --tail 200
+
+      # 失敗の原因をたどれるようにする（トレース・スクリーンショット）。
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+
+  # ------------------------------------------------------------------
   # 本番イメージのビルド確認（x86_64）
   # ------------------------------------------------------------------
   images:
@@ -328,7 +403,7 @@ jobs:
   # ------------------------------------------------------------------
   ci:
     name: CI
-    needs: [changes, prosody, api, web, images]
+    needs: [changes, prosody, api, web, e2e, images]
     # 変更範囲によってスキップされるジョブがあるため、常に実行して結果を集約する
     if: always()
     runs-on: ubuntu-latest
