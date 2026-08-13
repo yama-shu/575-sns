@@ -5,10 +5,16 @@ package postgres_test
 // 単体テスト（usecase）はリポジトリをモックするため、
 // **SQL の誤りや DB 制約の挙動は検出できない**。ここで確かめる。
 //
-// 接続先が無い環境ではスキップする。CI では postgres のサービスコンテナを
-// 起動し、マイグレーションを適用したうえで実行する。
+// # 接続先
 //
-//	docker compose exec api go test ./internal/infra/postgres/... -v
+// **このテストはデータを全件削除する**（cleanup）。そのため接続先を
+// api 本体と同じ `API_DATABASE_URL` からは読まない。専用の
+// `API_TEST_DATABASE_URL` を読み、未設定ならスキップする。
+//
+// 用意と実行の手順は README の「結合テスト」を参照。
+//
+//	./scripts/testdb.sh
+//	docker compose exec -e API_TEST_DATABASE_URL=... api go test ./internal/infra/postgres/... -v
 
 import (
 	"context"
@@ -26,18 +32,51 @@ import (
 	"github.com/yama-shu/575-sns/api/internal/infra/postgres"
 )
 
+// testDatabaseSuffix は消してよい DB の名前の末尾。
+//
+// **この規則を CI だけ免除しない。** 手元と CI で通る条件が変わると、
+// 手元で確かめたことが CI の保証にならない。
+const testDatabaseSuffix = "_test"
+
 func newPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	dsn := os.Getenv("API_DATABASE_URL")
+	dsn := os.Getenv("API_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("API_DATABASE_URL が未設定のためスキップする")
+		// **CI では飛ばさない。** 設定を落とすと結合テストが丸ごとスキップされ、
+		// 緑のまま何も確かめていない状態になる。CI は DB を立てているため、
+		// 未設定は設定の誤りである。
+		if os.Getenv("CI") != "" {
+			t.Fatal("CI では API_TEST_DATABASE_URL が必要です（結合テストがスキップされています）")
+		}
+		t.Skip("API_TEST_DATABASE_URL が未設定のためスキップする（README の「結合テスト」を参照）")
 	}
 	pool, err := pgxpool.New(context.Background(), dsn)
 	if err != nil {
 		t.Fatalf("接続できない: %v", err)
 	}
 	t.Cleanup(pool.Close)
+	requireTestDatabase(t, pool)
 	return pool
+}
+
+// requireTestDatabase は接続先が消してよい DB かを確かめる。
+//
+// **環境変数を分けただけでは足りない。** 新しい変数に開発用の DSN を
+// 書けば、同じことが起きる。接続先そのものに名前を尋ねる。
+//
+// 実際に開発用の DB を消した（#80）。歯止めはデータを触る前に置く。
+func requireTestDatabase(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	var name string
+	if err := pool.QueryRow(context.Background(), `SELECT current_database()`).Scan(&name); err != nil {
+		t.Fatalf("接続先の DB 名を取得できない: %v", err)
+	}
+	if !strings.HasSuffix(name, testDatabaseSuffix) {
+		t.Fatalf(
+			"接続先 %q は名前が %q で終わりません。結合テストは reports / posts / users を全件削除します。"+
+				"テスト用の DB を ./scripts/testdb.sh で用意してください",
+			name, testDatabaseSuffix)
+	}
 }
 
 // cleanup は各テストの前後でデータを消す。
