@@ -20,11 +20,18 @@ import styles from "./AppShell.module.css";
  * 遷移できる」としている。自分のページは識別名が要るため、
  * `href` を利用者から組み立てる。
  */
-const NAV_ITEMS: { href: string | ((handle: string) => string); label: string; requiresAuth: boolean }[] = [
+const NAV_ITEMS: {
+  href: string | ((handle: string) => string);
+  label: string;
+  requiresAuth: boolean;
+  /** 運営にだけ出す項目か。出し分けないと経路の存在を教えることになる（#76）。 */
+  requiresAdmin?: boolean;
+}[] = [
   { href: "/", label: "全体", requiresAuth: false },
   { href: "/home", label: "フォロー中", requiresAuth: true },
   { href: (handle) => `/@${handle}`, label: "自分の句", requiresAuth: true },
   { href: "/settings/profile", label: "設定", requiresAuth: true },
+  { href: "/admin/reports", label: "通報", requiresAuth: true, requiresAdmin: true },
 ];
 
 type Props = {
@@ -36,7 +43,10 @@ type Props = {
 };
 
 export function AppShell({ title, user, current, children }: Props) {
-  const items = NAV_ITEMS.filter((item) => !item.requiresAuth || user !== null).map((item) => ({
+  const items = NAV_ITEMS.filter(
+    (item) =>
+      (!item.requiresAuth || user !== null) && (!item.requiresAdmin || user?.is_admin === true),
+  ).map((item) => ({
     label: item.label,
     href: typeof item.href === "string" ? item.href : item.href(user?.handle ?? ""),
   }));
