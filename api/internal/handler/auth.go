@@ -51,6 +51,12 @@ type userResponse struct {
 	DisplayName string `json:"display_name"`
 	Bio         string `json:"bio"`
 	AvatarURL   string `json:"avatar_url,omitempty"`
+	// IsAdmin は運営かどうか。**本人向けの応答にしか使わない**ため、
+	// 他人にこの値が漏れることはない（#76）。
+	//
+	// 画面がナビゲーションの出し分けに使う。出し分けずに全員へ出すと、
+	// 運営向けの経路があることを教えることになる。
+	IsAdmin bool `json:"is_admin"`
 }
 
 func toUserResponse(user *domain.User) userResponse {
@@ -59,6 +65,7 @@ func toUserResponse(user *domain.User) userResponse {
 		DisplayName: user.DisplayName,
 		Bio:         user.Bio,
 		AvatarURL:   user.AvatarURL,
+		IsAdmin:     user.IsAdmin,
 	}
 }
 

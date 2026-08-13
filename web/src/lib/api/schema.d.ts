@@ -600,6 +600,12 @@ export interface components {
             /** @example やまだ */
             display_name: string;
             bio: string;
+            /** @description 運営かどうか。**本人向けの応答にしか使わない**ため、他人には漏れない。
+             *
+             *     画面がナビゲーションの出し分けに使う。出し分けずに全員へ出すと、
+             *     運営向けの経路があることを教えることになる。
+             *      */
+            is_admin: boolean;
             avatar_url?: string;
         };
         SignUpRequest: {
