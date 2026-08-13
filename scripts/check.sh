@@ -65,9 +65,20 @@ check_web() {
   run_step "ビルド"          $d npm run build
 }
 
+# E2E は型検査だけを行う。
+#
+# **テスト本体はここで動かさない。** db・prosody・api・web を立てた状態が要り、
+# 本番相当のイメージのビルドから始めると数分かかる。
+# 実行方法は README を参照（CI では専用のジョブで動かす）。
+check_e2e() {
+  section "e2e（Playwright）"
+  local d="docker run --rm -v ${ROOT}/e2e:/app -w /app ${NODE_IMAGE}"
+  run_step "型検査 (tsc)" $d npm run typecheck
+}
+
 targets=("$@")
 if [ ${#targets[@]} -eq 0 ]; then
-  targets=(prosody api web)
+  targets=(prosody api web e2e)
 fi
 
 for t in "${targets[@]}"; do
@@ -75,7 +86,8 @@ for t in "${targets[@]}"; do
     prosody) check_prosody ;;
     api)     check_api ;;
     web)     check_web ;;
-    *) echo "不明なサービス: $t（prosody / api / web のいずれか）" >&2; exit 2 ;;
+    e2e)     check_e2e ;;
+    *) echo "不明なサービス: $t（prosody / api / web / e2e のいずれか）" >&2; exit 2 ;;
   esac
 done
 
