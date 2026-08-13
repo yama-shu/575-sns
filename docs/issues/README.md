@@ -221,6 +221,7 @@ flowchart LR
 | [0032](0032-feat-relation-list-screens.md) | `feat` | フォロー中・フォロワー・ブロック中の一覧画面を実装する | [#71](https://github.com/yama-shu/575-sns/issues/71) |
 | [0033](0033-feat-admin-reports-api.md) | `feat` | 運営が通報を確認し、投稿を非表示にする API を実装する | [#74](https://github.com/yama-shu/575-sns/issues/74) |
 | [0034](0034-feat-admin-reports-screen.md) | `feat` | 運営向けの通報一覧の画面を実装する | [#76](https://github.com/yama-shu/575-sns/issues/76) |
+| [0035](0035-test-e2e.md) | `test` | E2E テストで主要な導線を確認する | [#78](https://github.com/yama-shu/575-sns/issues/78) |
 
 ### MVP 後（起票済みのもの）
 
@@ -308,7 +309,7 @@ flowchart LR
 | 10 | `feat` | 一覧の画面を実装する（[0032](0032-feat-relation-list-screens.md) / [#71](https://github.com/yama-shu/575-sns/issues/71)） | S-05 / S-06 / S-11 |
 | 11 | `feat` | 運営の通報 API を実装する（[0033](0033-feat-admin-reports-api.md) / [#74](https://github.com/yama-shu/575-sns/issues/74)） | S-13 の前提 |
 | 12 | `feat` | 運営向けの通報一覧の画面を実装する（[0034](0034-feat-admin-reports-screen.md) / [#76](https://github.com/yama-shu/575-sns/issues/76)） | S-13 |
-| 13 | `test` | E2E テストで主要な導線を確認する（[詳細設計 04 §1](../design/detail/04-test-design.md)） | — |
+| 13 | `test` | E2E テストで主要な導線を確認する（[0035](0035-test-e2e.md) / [#78](https://github.com/yama-shu/575-sns/issues/78)） | — |
 
 > **1 を最初に行う。** [基本設計 05 §6](../design/basic/05-api.md#6-openapi-定義) は
 > 「api は定義ファイルを手で書き、web はその定義から型を生成する」としているが、
