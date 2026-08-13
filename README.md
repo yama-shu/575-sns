@@ -755,6 +755,7 @@ api（Go）と web（TypeScript）はこれを契約として型を生成する�
 | `POSTGRES_PORT` | `5432` | ホスト側に公開するポート |
 | `API_PORT` | `8080` | ホスト側に公開するポート |
 | `API_DATABASE_URL` | compose が組み立て | DB 接続文字列。**パスワードを含むためログに出さない** |
+| `API_TEST_DATABASE_URL` | なし | **結合テスト専用**の DB 接続文字列。未設定なら結合テストはスキップする（[下記](#結合テストapi--db)） |
 | `API_PROSODY_URL` | `http://prosody:8000` | prosody の場所 |
 | `API_DATABASE_TIMEOUT` | `3s` | DB のタイムアウト |
 | `API_PROSODY_TIMEOUT` | `1s` | prosody のタイムアウト（[基本設計 01 §6](docs/design/basic/01-architecture.md#6-サービス間通信)） |
@@ -789,13 +790,35 @@ docker compose -f compose.yaml build prosody  # 特定のサービスだけ
 # prosody — pytest（カバレッジは pyproject.toml の設定で常時計測される）
 docker compose run --rm prosody pytest
 
-# api — go test（結合テストは API_DATABASE_URL があるときだけ走る）
+# api — go test（結合テストは下記の準備をしたときだけ走る）
 docker compose exec api go test ./... -cover
 
 # web — 型検査と lint
 docker compose run --rm web npm run typecheck
 docker compose run --rm web npm run lint
 ```
+
+#### 結合テスト（api + DB）
+
+**結合テストは `reports` / `posts` / `users` を全件削除します。**
+開発用のデータを消さないよう、専用のデータベースを使います。
+
+```bash
+./scripts/testdb.sh   # sns575_test を作り、マイグレーションを適用する
+
+docker compose exec \
+  -e API_TEST_DATABASE_URL='postgres://sns575:local-dev-only@db:5432/sns575_test?sslmode=disable' \
+  api go test ./internal/infra/postgres/... -v
+
+./scripts/testdb.sh --drop   # 片付ける
+```
+
+接続先は api 本体の `API_DATABASE_URL` とは**別の変数**で渡します。
+同じ変数を使うと、api が動く場所で `go test` を叩いただけで開発用のデータが消えます
+（[#80](https://github.com/yama-shu/575-sns/issues/80) で実際に消しました）。
+
+さらに結合テストは接続先の名前を確かめ、**末尾が `_test` でなければ実行を拒否します。**
+新しい変数に開発用の DSN を書いた場合の歯止めです。
 
 カバレッジの目標は [NFR-05-04](docs/requirements/01-requirements.md#nfr-05-保守性運用性) にもとづき、
 prosody が C1 100%、api の usecase 層が 90% です。
