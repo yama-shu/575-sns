@@ -59,6 +59,7 @@ M0（開発基盤）と M1（判定エンジン）は完了しています。
 ├── web/                      # TypeScript / Next.js — 画面描画・SSR
 ├── api/                      # Go / Echo — 業務ロジック・永続化
 ├── prosody/                  # Python / FastAPI — 五七五判定エンジン
+├── e2e/                      # Playwright — 3サービスをつないだ導線の確認
 └── docs/
     ├── README.md             # ドキュメント地図（ここから読む）
     ├── requirements/         # 要件定義
@@ -782,7 +783,6 @@ docker compose -f compose.yaml build prosody  # 特定のサービスだけ
 
 ### テスト方法
 
-判定ロジックは M1 で実装します。現時点では起動確認のテストのみです。
 テストケースの設計は [詳細設計 04](docs/design/detail/04-test-design.md) にあります。
 
 ```bash
@@ -813,6 +813,39 @@ lint・型検査・テストを CI と同じ内容で流せます。**push す�
 使うイメージとツールのバージョンは [CI](.github/workflows/ci.yml) と揃えてあるため、
 「手元では通ったのに CI で落ちる」が起きません。
 
+#### E2E テスト
+
+db・prosody・api・web をつないだ状態で、主要な導線を Playwright で確認します
+（[詳細設計 04 §11](docs/design/detail/04-test-design.md#11-e2e-テストの設計)）。
+
+**本番相当のイメージで動かします。** 開発モード（`compose.override.yaml`）では
+初回のアクセスでその画面のコンパイルが走り、判定の往復に数十秒が乗るため、
+落ちても実装の問題か区別できません。
+
+```bash
+# スタックを本番相当で起動する（compose.override.yaml を読ませない）
+docker compose -f compose.yaml up -d --build --wait
+
+cd e2e
+npm ci
+npx playwright install chromium   # 初回のみ
+npm test
+
+npm run report                    # 失敗したときの記録を見る
+```
+
+開発用のスタック（`docker compose up`）を止めたくない場合は、
+別のプロジェクト名とポートで立てて、そちらに向けられます。
+
+```bash
+WEB_PORT=3100 API_PORT=8180 docker compose -f compose.yaml -p 575e2e up -d --build --wait
+E2E_BASE_URL=http://localhost:3100 npm test --prefix e2e
+
+docker compose -p 575e2e down -v  # 後片付け
+```
+
+利用者はテストごとに登録するため、既存のデータには触れません。
+
 ### CI
 
 Pull Request を作ると [CI](.github/workflows/ci.yml) が自動で走ります。
@@ -823,6 +856,7 @@ Pull Request を作ると [CI](.github/workflows/ci.yml) が自動で走りま�
 | prosody | ruff / ruff format / mypy / pytest（**C1 100% を下回ると失敗**）/ pip-audit |
 | api | gofmt / go vet / golangci-lint / go test / govulncheck |
 | web | eslint / tsc / next build / npm audit |
+| E2E | 本番相当のスタックを立てて Playwright を実行する。**prosody / api / web のいずれかが変わったら走る** |
 | イメージのビルド | 各サービスの `runtime` を **x86_64 ランナー**でビルドする |
 | カバレッジの報告 | 結果を PR に1つのコメントとして投稿・更新する |
 | CI | 上記を集約する。ブランチ保護の required status check はこれを指定する |
