@@ -1,0 +1,140 @@
+/* 通報1件（S-13）。 */
+
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space);
+  background: var(--color-bg);
+  display: grid;
+  gap: 10px;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reason {
+  font-weight: 700;
+  color: var(--color-error);
+}
+
+.time {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.comment {
+  /* 補足は文章として書かれる。改行を保つ。 */
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+}
+
+/* 通報された句。運営が判断する対象なので、地の情報より目立たせる。 */
+.post {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 12px var(--space);
+  background: var(--color-bg-subtle);
+}
+
+.author {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.author span {
+  color: var(--color-muted);
+  font-weight: 400;
+}
+
+.body {
+  margin-top: 8px;
+  font-size: 1.15rem;
+  line-height: 2;
+  display: grid;
+  gap: 2px;
+}
+
+.segment {
+  white-space: pre-wrap;
+}
+
+.reporter {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.actions {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space);
+  flex-wrap: wrap;
+}
+
+.reject {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 8px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.resolve {
+  font-size: 0.9rem;
+}
+
+.resolveSummary {
+  color: var(--color-error);
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.resolveBody {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius);
+  background: var(--color-error-bg);
+  justify-items: start;
+}
+
+.warning {
+  color: var(--color-fg);
+  font-size: 0.85rem;
+}
+
+.danger {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 8px 18px;
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-error);
+  cursor: pointer;
+}
+
+.reject:disabled,
+.danger:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.error {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
