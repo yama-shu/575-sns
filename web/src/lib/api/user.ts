@@ -117,3 +117,38 @@ export function fetchRelationList(
       : `/users/${encodeURIComponent(handle)}/${kind}?${query}`;
   return callApi<RelationList>(path);
 }
+
+export type PendingReports = components["schemas"]["PendingReports"];
+export type PendingReport = components["schemas"]["PendingReport"];
+
+/**
+ * 未対応の通報を取得する（S-13）。
+ *
+ * **古い順に返る。** 待たせている順に処理するため、カーソルの向きも
+ * タイムラインと逆になる。
+ *
+ * 運営でなければ api が 404 を返す。403 にすると運営向けの経路が
+ * 存在することを教えることになるため（#74）。
+ */
+export function fetchPendingReports(
+  cursor?: string,
+  limit = 20,
+): Promise<ApiResult<PendingReports>> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (cursor) query.set("cursor", cursor);
+  return callApi<PendingReports>(`/admin/reports?${query}`);
+}
+
+/** 通報に対応する（投稿を非表示にする）。 */
+export function resolveReport(id: string): Promise<ApiResult<undefined>> {
+  return callApi<undefined>(`/admin/reports/${encodeURIComponent(id)}/resolve`, {
+    method: "POST",
+  });
+}
+
+/** 通報を却下する。投稿は変わらない。 */
+export function rejectReport(id: string): Promise<ApiResult<undefined>> {
+  return callApi<undefined>(`/admin/reports/${encodeURIComponent(id)}/reject`, {
+    method: "POST",
+  });
+}
