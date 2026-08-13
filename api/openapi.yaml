@@ -780,11 +780,18 @@ components:
 
         **メールアドレスとパスワードハッシュを含めない。**
         本人向けの応答でも、返す必要がないものは返さない。
-      required: [handle, display_name, bio]
+      required: [handle, display_name, bio, is_admin]
       properties:
         handle: { type: string, examples: [yamada] }
         display_name: { type: string, examples: [やまだ] }
         bio: { type: string }
+        is_admin:
+          type: boolean
+          description: |
+            運営かどうか。**本人向けの応答にしか使わない**ため、他人には漏れない。
+
+            画面がナビゲーションの出し分けに使う。出し分けずに全員へ出すと、
+            運営向けの経路があることを教えることになる。
         avatar_url: { type: string }
 
     SignUpRequest:
