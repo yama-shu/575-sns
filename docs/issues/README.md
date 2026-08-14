@@ -225,6 +225,7 @@ flowchart LR
 | [0036](0036-fix-integration-test-db-guard.md) | `fix` | 結合テストが開発用のデータベースを消すのを防ぐ | [#80](https://github.com/yama-shu/575-sns/issues/80) |
 | [0037](0037-docs-backlog-corrections.md) | `docs` | バックログの記述を実態に合わせる | [#82](https://github.com/yama-shu/575-sns/issues/82) |
 | [0038](0038-infra-publish-575.md) | `infra` | 575 を HTTPS で一般公開する | [#84](https://github.com/yama-shu/575-sns/issues/84) |
+| [0039](0039-infra-ghcr-cd.md) | `infra` | イメージを GHCR へ配布し、サーバーは pull だけにする | [#86](https://github.com/yama-shu/575-sns/issues/86) |
 | [0040](0040-chore-dependency-vulnerabilities.md) | `chore` | 依存の脆弱性検査の失敗を解消する | [#88](https://github.com/yama-shu/575-sns/issues/88) |
 
 ### MVP 後（起票済みのもの）
@@ -348,7 +349,7 @@ E2E は画面が揃ってから着手する。API だけの段階で書くと、
 | --- | --- |
 | `infra` | ~~ドメインと DNS の扱いを決める~~ → **`575.ramen-oil.com` に決定**（[#84](https://github.com/yama-shu/575-sns/issues/84)）。設定は移行後 |
 | `infra` | **K8s マニフェストをローカルの kind / k3d で作成し実証する**（`resources` 必須。`replicas` を決め打ちにしない） |
-| `infra` | CD パイプラインを構築する（GitHub Actions → GHCR → VPS が pull） |
+| `infra` | **配布の経路を作る**（GitHub Actions → GHCR → VPS が pull）（[0039](0039-infra-ghcr-cd.md) / [#86](https://github.com/yama-shu/575-sns/issues/86)）。自動デプロイは公開後 |
 | `infra` | Cloudflare・R2・Sentry を準備する |
 | `infra` | **公開の手順を用意する**（[0038](0038-infra-publish-575.md) / [#84](https://github.com/yama-shu/575-sns/issues/84)）。実施は移行後 |
 

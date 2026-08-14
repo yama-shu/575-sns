@@ -100,8 +100,9 @@ OS 250 + Docker/oil_game 93 + web 35 + api 3 + prosody 128 + postgres 40 ≈ 550
 残り約 1,400 MiB（+ swap 2 GB）
 ```
 
-**イメージのビルドはこの余裕を使う。** 手元の環境で web の `runtime` ステージのビルドに
-9分かかった実測がある。swap を確保したうえで実施する。
+**サーバー上ではビルドしない。** CI が x86_64 でビルドしたものを GHCR から取得する
+（[#86](https://github.com/yama-shu/575-sns/issues/86) / [ADR-0007](../adr/0007-hosting-conoha-vps.md)）。
+Next.js のビルドは 1 GB 級を要求し、同居する oil_game ごと CPU とメモリを奪う。
 
 ### `.env` で必ず変える3項目
 
@@ -311,6 +312,7 @@ UPDATE users SET is_admin = true WHERE handle = '...';
 - [x] `.env` の雛形を用意する（[下記](#env-の雛形)）
 - [x] nginx の設定を書いておく（[下記](#nginx-の設定当日はこれを貼る)）
 - [ ] `POSTGRES_PASSWORD` を生成して控える
+- [ ] **GHCR のパッケージを public にする**（[#86](https://github.com/yama-shu/575-sns/issues/86)。private のままだとサーバーで `docker login` が要る）
 - [ ] 外形監視のアカウントを用意する
 
 ### 2. 公開当日
@@ -324,9 +326,10 @@ cd 575-sns
 cp .env.example .env
 vi .env
 
-# 3) 起動（compose.override.yaml を読ませない）
-docker compose -f compose.yaml up -d --build --wait
-docker compose -f compose.yaml ps
+# 3) イメージを取得して起動（サーバー上でビルドしない。#86）
+docker compose -f compose.yaml -f compose.prod.yaml pull
+docker compose -f compose.yaml -f compose.prod.yaml up -d --no-build --wait
+docker compose -f compose.yaml -f compose.prod.yaml ps
 
 # 4) 内部から疎通（ここが通らないうちは nginx へ進まない）
 curl -sI http://127.0.0.1:3000/ | head -3
