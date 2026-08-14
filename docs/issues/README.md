@@ -381,7 +381,16 @@ E2E は画面が揃ってから着手する。API だけの段階で書くと、
 | 種別 | タイトル | 要件 | 備考 |
 | --- | --- | --- | --- |
 | `feat` | 退会を実装する（投稿も併せて削除する） | [FR-01-04](../requirements/01-requirements.md#fr-01-アカウント) | `DELETE /api/v1/me`。API 設計あり |
+| `feat` | **利用停止を実装する** | [FR-05-04](../requirements/01-requirements.md#fr-05-健全性) | 運営は通報を裁けるが、利用者を止める手段が無い（下記） |
 | `feat` | パスワード再設定を実装する | [FR-01-05](../requirements/01-requirements.md#fr-01-アカウント) | **API 設計が未着手。** メール送信基盤も無いため、先に方式の検討が必要 |
+
+> **利用停止が抜けていた。**
+> [#74](https://github.com/yama-shu/575-sns/issues/74) と [#76](https://github.com/yama-shu/575-sns/issues/76) が
+> 「やらないこと」で「別 Issue」としたまま、この表に載っていなかった（[#82](https://github.com/yama-shu/575-sns/issues/82) で判明）。
+>
+> `users.status` は `active` / `suspended` / `deleted` を取り、
+> `CanLogIn()` は `active` のときだけ真を返す。一覧の可視性も `status = 'active'` で絞っている。
+> **`suspended` に遷移させる経路が無いだけ**である。
 
 ---
 
