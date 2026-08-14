@@ -341,7 +341,17 @@ E2E は画面が揃ってから着手する。API だけの段階で書くと、
 | `infra` | **K8s マニフェストをローカルの kind / k3d で作成し実証する**（`resources` 必須。`replicas` を決め打ちにしない） |
 | `infra` | CD パイプラインを構築する（GitHub Actions → GHCR → VPS が pull） |
 | `infra` | Cloudflare・R2・Sentry を準備する |
-| `infra` | docker compose + Caddy で暫定公開し、Let's Encrypt で HTTPS 化する |
+| `infra` | docker compose で暫定公開し、**既存の nginx と certbot に相乗りして** HTTPS 化する（下記） |
+
+> **暫定公開に Caddy を使わない。**
+> 既存の VPS では **nginx が 443 を使用している**（oil_game のリバースプロキシ）。
+> 証明書も certbot（`authenticator = nginx` / `installer = nginx`）で取得し、
+> `certbot.timer` が自動更新している。
+>
+> ここに Caddy を足すと 443 が競合し、[ADR-0007](../adr/0007-hosting-conoha-vps.md) の
+> 制約 D「oil_game を巻き込んで落とさないこと」に反する。
+> **既存の nginx に vhost を足し、certbot でサブドメインの証明書を追加する。**
+> 既存の更新の仕組みにそのまま乗るため、新たに導入するものが無い（[#82](https://github.com/yama-shu/575-sns/issues/82)）。
 
 #### 移行（2026年8月下旬 予定・変動あり）
 
