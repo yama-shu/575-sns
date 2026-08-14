@@ -53,6 +53,7 @@ M0（開発基盤）と M1（判定エンジン）は完了しています。
 ├── LICENSE
 ├── compose.yaml              # ローカル実行用（本番相当のイメージで動かす）
 ├── compose.override.yaml     # 開発用の差分（ホットリロード等。up で自動適用）
+├── compose.prod.yaml         # 本番用の差分（GHCR から pull する。明示指定が要る）
 ├── .github/workflows/        # CI
 ├── scripts/                  # 省力化スクリプト（check.sh など）
 ├── .env.example              # 環境変数の雛形。cp して .env を作る
@@ -890,17 +891,55 @@ Pull Request を作ると [CI](.github/workflows/ci.yml) が自動で走りま�
 
 ### リリース方法
 
-本番へのデプロイは M5 で整備します（[未起票のバックログ](docs/issues/README.md#未起票のバックログ)）。
-現時点でリリース版のイメージを手元で作る手順は以下です。
+**サーバー上でイメージをビルドしません**（[ADR-0007](docs/adr/0007-hosting-conoha-vps.md)）。
+Next.js のビルドは 1 GB 級を要求し、VPS 上で行うと同居する別プロジェクトごと
+CPU とメモリを奪います。CI が x86_64 でビルドしたものを GHCR から取得します。
+
+```
+main への push → GitHub Actions が runtime をビルド → GHCR に push
+                                                          ↓
+                                          サーバーは pull するだけ
+```
+
+イメージは `main` への push のたびに、2つのタグで配布されます。
+
+| タグ | 用途 |
+| --- | --- |
+| `latest` | 最新 |
+| コミットの SHA | **壊れた版を配布したときに戻すため** |
+
+Pull Request では **push しません**。レビュー前のイメージが `latest` になるのを避けるためで、
+PR ではビルドの検証だけを行います。
+
+#### サーバーでの起動
 
 ```bash
-# 本番相当のイメージをタグ付きでビルドする
+# 取得（compose.prod.yaml は自動では読まれません。明示的に指定します）
+docker compose -f compose.yaml -f compose.prod.yaml pull
+
+# 起動（--no-build でビルドを禁じる）
+docker compose -f compose.yaml -f compose.prod.yaml up -d --no-build
+```
+
+過去の版に戻すときは `IMAGE_TAG` を指定します。
+
+```bash
+IMAGE_TAG=<コミットの SHA> docker compose -f compose.yaml -f compose.prod.yaml up -d --no-build
+```
+
+> **`compose.yaml` は変更していません。** あちらは手元で本番相当を動かすための
+> ファイルであり、E2E もそれを使います。GHCR の名前を書き込むと手元でビルドできなくなります。
+
+#### 手元でリリース版のイメージを作る
+
+CI を経由せずに確認したい場合の手順です。
+
+```bash
 docker build -t 575-sns/prosody:$(git describe --tags --always) --target runtime ./prosody
 docker build -t 575-sns/api:$(git describe --tags --always)     --target runtime ./api
 docker build -t 575-sns/web:$(git describe --tags --always)     --target runtime ./web
 ```
 
-本番は x86_64（ConoHa VPS）で動きます（[ADR-0007](docs/adr/0007-hosting-conoha-vps.md)）。
 開発機が Apple Silicon の場合はローカルで ARM のイメージができるため、
 本番と同じものを確認したい場合は `--platform linux/amd64` を付けてください。
 
