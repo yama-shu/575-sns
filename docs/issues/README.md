@@ -225,6 +225,7 @@ flowchart LR
 | [0036](0036-fix-integration-test-db-guard.md) | `fix` | 結合テストが開発用のデータベースを消すのを防ぐ | [#80](https://github.com/yama-shu/575-sns/issues/80) |
 | [0037](0037-docs-backlog-corrections.md) | `docs` | バックログの記述を実態に合わせる | [#82](https://github.com/yama-shu/575-sns/issues/82) |
 | [0038](0038-infra-publish-575.md) | `infra` | 575 を HTTPS で一般公開する | [#84](https://github.com/yama-shu/575-sns/issues/84) |
+| [0040](0040-chore-dependency-vulnerabilities.md) | `chore` | 依存の脆弱性検査の失敗を解消する | [#88](https://github.com/yama-shu/575-sns/issues/88) |
 
 ### MVP 後（起票済みのもの）
 
