@@ -365,6 +365,10 @@ jobs:
     # 本番は ConoHa VPS の x86_64 で動く（ADR-0007）。
     # アーキテクチャが違うランナーで検証すると、本番でのみ壊れる依存を見逃す。
     runs-on: ubuntu-latest
+    # GHCR への push に要る。既定の contents: read だけでは足りない。
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -374,13 +378,31 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
-      - name: runtime ステージをビルドする
+      # **Pull Request では push しない。**
+      # レビュー前のイメージが latest になると、それが配布されてしまう。
+      - name: GHCR にログインする
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ビルドしたものをそのまま配布する（ADR-0007）。
+      # サーバーは pull だけを行う。Next.js のビルドは 1 GB 級を要求するため、
+      # VPS 上でビルドすると同居する別プロジェクトごと CPU とメモリを奪う。
+      #
+      # **SHA のタグも付ける。** latest だけだと、壊れた版を配布したときに戻せない。
+      - name: runtime ステージをビルドし、main なら配布する
         uses: docker/build-push-action@v7
         with:
           context: ./${{ matrix.service }}
           target: runtime
-          push: false
+          push: ${{ github.event_name == 'push' }}
           load: false
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/575-${{ matrix.service }}:latest
+            ghcr.io/${{ github.repository_owner }}/575-${{ matrix.service }}:${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
