@@ -345,7 +345,7 @@ E2E は画面が揃ってから着手する。API だけの段階で書くと、
 
 | 種別 | タイトル |
 | --- | --- |
-| `infra` | ドメインと DNS の扱いを決める（取得済みドメインのサブドメインを使うか） |
+| `infra` | ~~ドメインと DNS の扱いを決める~~ → **`575.ramen-oil.com` に決定**（[#84](https://github.com/yama-shu/575-sns/issues/84)）。設定は移行後 |
 | `infra` | **K8s マニフェストをローカルの kind / k3d で作成し実証する**（`resources` 必須。`replicas` を決め打ちにしない） |
 | `infra` | CD パイプラインを構築する（GitHub Actions → GHCR → VPS が pull） |
 | `infra` | Cloudflare・R2・Sentry を準備する |

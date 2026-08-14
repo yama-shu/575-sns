@@ -21,7 +21,7 @@
 
 | 項目 | 選択肢 | 状態 |
 | --- | --- | --- |
-| サブドメイン | 取得済みドメインのサブドメインを使う | **未決** |
+| サブドメイン | **`575.ramen-oil.com`** | 決定（[下記](#サブドメインは-575ramen-oilcom)） |
 | アクセス数の記録 | Cloudflare を前段に置く / nginx の `access_log` を集計する | **保留**（[下記](#アクセス数の記録は保留する)） |
 
 ## やること
@@ -40,7 +40,7 @@
 
 ### 公開
 
-- [ ] `https://<サブドメイン>` が **200** を返す
+- [ ] `https://575.ramen-oil.com` が **200** を返す
 - [ ] HTTP でアクセスすると HTTPS へリダイレクトされる
 - [ ] 証明書の発行者が Let's Encrypt である
 - [ ] **登録 → 投稿 → 閲覧が実際に通る**（本番環境で手で確認する）
@@ -131,6 +131,17 @@ API_PORT=127.0.0.1:8080
 
 `"127.0.0.1:3000:3000"` に展開され、nginx からは届き、外からは届かなくなる。
 
+### サブドメインは `575.ramen-oil.com`
+
+取得済みの `ramen-oil.com` のサブドメインを使う。**新しくドメインは取らない。**
+
+- DNS は お名前.com（ネームサーバーは `dnsv.jp`）で管理している
+- `575.ramen-oil.com` は未使用である
+- 数字で始まるラベルは RFC 1123 が許しており、TLD が `com` のため IP と混同されない
+
+**公開後に変えない。** URL を変えると証明書の履歴（crt.sh）も稼働率の記録も分散し、
+運用の実績が2つに割れる。
+
 ### nginx は既存のものに相乗りする
 
 既存の VPS では **nginx が 443 を使用している**（oil_game のリバースプロキシ）。
@@ -184,7 +195,7 @@ UPDATE users SET is_admin = true WHERE handle = '...';
 
 ### 1. 事前（8/16 まで）
 
-- [ ] DNS の TTL を 300 秒に下げる（切り替えを速くする）
+- [ ] `ramen-oil.com` の A レコードの TTL を 3600 → 300 に下げる（切り替えを速くする）
 - [ ] `.env` の内容を決める
 - [ ] nginx の vhost 設定を書いておく
 - [ ] 外形監視のアカウントを用意する
@@ -212,10 +223,10 @@ curl -s  http://127.0.0.1:8080/readyz
 sudo nginx -t && sudo systemctl reload nginx
 
 # 6) 証明書
-sudo certbot --nginx -d <サブドメイン>
+sudo certbot --nginx -d 575.ramen-oil.com
 
 # 7) 外から
-curl -sI https://<サブドメイン> | head -3
+curl -sI https://575.ramen-oil.com | head -3
 ```
 
 ### 3. 公開後
@@ -225,6 +236,7 @@ curl -sI https://<サブドメイン> | head -3
 - [ ] 外形監視の開始
 - [ ] `pg_dump` を1回取る
 - [ ] `restart: unless-stopped` が効いていることの確認（`docker inspect`）
+- [ ] TTL を 3600 に戻す
 
 ## 参考
 
