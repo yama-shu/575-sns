@@ -1,0 +1,36 @@
+# 575 — 本番（VPS）で使う差分
+#
+# **サーバー上でイメージをビルドしない**（ADR-0007）。
+# Next.js のビルドは 1 GB 級を要求し、VPS 上で行うと同居する別プロジェクトごと
+# CPU とメモリを奪う。CI が x86_64 でビルドしたものを GHCR から取得する。
+#
+# compose.override.yaml とは違い、**自動では読み込まれない**。明示的に指定する。
+#
+#   docker compose -f compose.yaml -f compose.prod.yaml pull
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d --no-build
+#
+# **compose.yaml は変更していない。** あちらは手元で本番相当を動かすための
+# ファイルであり、E2E もそれを使う。GHCR の名前を書き込むと手元でビルドできなくなる。
+#
+# 版の指定:
+#   IMAGE_TAG=latest              最新（既定）
+#   IMAGE_TAG=<コミットの SHA>     その版に戻す
+#
+# タグは CI が latest と SHA の2つを付ける（.github/workflows/ci.yml）。
+
+services:
+  prosody:
+    image: ghcr.io/yama-shu/575-prosody:${IMAGE_TAG:-latest}
+
+  # migrate と cleanup は api と同じイメージを command で呼び分ける。
+  migrate:
+    image: ghcr.io/yama-shu/575-api:${IMAGE_TAG:-latest}
+
+  cleanup:
+    image: ghcr.io/yama-shu/575-api:${IMAGE_TAG:-latest}
+
+  api:
+    image: ghcr.io/yama-shu/575-api:${IMAGE_TAG:-latest}
+
+  web:
+    image: ghcr.io/yama-shu/575-web:${IMAGE_TAG:-latest}
