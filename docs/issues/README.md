@@ -224,6 +224,7 @@ flowchart LR
 | [0035](0035-test-e2e.md) | `test` | E2E テストで主要な導線を確認する | [#78](https://github.com/yama-shu/575-sns/issues/78) |
 | [0036](0036-fix-integration-test-db-guard.md) | `fix` | 結合テストが開発用のデータベースを消すのを防ぐ | [#80](https://github.com/yama-shu/575-sns/issues/80) |
 | [0037](0037-docs-backlog-corrections.md) | `docs` | バックログの記述を実態に合わせる | [#82](https://github.com/yama-shu/575-sns/issues/82) |
+| [0038](0038-infra-publish-575.md) | `infra` | 575 を HTTPS で一般公開する | [#84](https://github.com/yama-shu/575-sns/issues/84) |
 
 ### MVP 後（起票済みのもの）
 
@@ -330,9 +331,15 @@ E2E は画面が揃ってから着手する。API だけの段階で書くと、
 ### M5 公開
 
 [ADR-0007 の移行計画](../adr/0007-hosting-conoha-vps.md#6-決定)にもとづき、時期で分ける。
-移行は **2026年8月下旬を予定する。変動の可能性がある。**
-現行 1 GB の契約更新日は 2026-09-11 であり、それまでは
-**1 GB のまま進められる作業を前倒しする**。
+**2 GB の新規契約を 2026-08-16 に行う予定**である。現行 1 GB の契約更新日は 2026-09-11。
+
+> **1 GB での暫定公開は行わない。**
+> 契約日が決まったため、1 GB に 575 を同居させる必要が無くなった。
+> 実測でも空きは 562 MiB に対し 575 のアプリが 392 MiB であり、
+> [ADR-0007](../adr/0007-hosting-conoha-vps.md) の制約 D「oil_game を巻き込んで落とさないこと」に対して余裕が小さい。
+> compose と nginx で暫定公開しても、k3s へ載せ替える二重作業になる。
+>
+> **公開は移行後に 2 GB で行う**（[#84](https://github.com/yama-shu/575-sns/issues/84)）。
 
 #### 第1期（2026-08-09 〜 移行まで）— 現行 1 GB とローカルで進める
 
@@ -342,9 +349,9 @@ E2E は画面が揃ってから着手する。API だけの段階で書くと、
 | `infra` | **K8s マニフェストをローカルの kind / k3d で作成し実証する**（`resources` 必須。`replicas` を決め打ちにしない） |
 | `infra` | CD パイプラインを構築する（GitHub Actions → GHCR → VPS が pull） |
 | `infra` | Cloudflare・R2・Sentry を準備する |
-| `infra` | docker compose で暫定公開し、**既存の nginx と certbot に相乗りして** HTTPS 化する（下記） |
+| `infra` | **公開の手順を用意する**（[0038](0038-infra-publish-575.md) / [#84](https://github.com/yama-shu/575-sns/issues/84)）。実施は移行後 |
 
-> **暫定公開に Caddy を使わない。**
+> **公開に Caddy を使わない。**
 > 既存の VPS では **nginx が 443 を使用している**（oil_game のリバースプロキシ）。
 > 証明書も certbot（`authenticator = nginx` / `installer = nginx`）で取得し、
 > `certbot.timer` が自動更新している。
@@ -354,7 +361,7 @@ E2E は画面が揃ってから着手する。API だけの段階で書くと、
 > **既存の nginx に vhost を足し、certbot でサブドメインの証明書を追加する。**
 > 既存の更新の仕組みにそのまま乗るため、新たに導入するものが無い（[#82](https://github.com/yama-shu/575-sns/issues/82)）。
 
-#### 移行（2026年8月下旬 予定・変動あり）
+#### 移行（2026-08-16 契約予定）
 
 | 種別 | タイトル |
 | --- | --- |
