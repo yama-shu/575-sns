@@ -223,6 +223,7 @@ flowchart LR
 | [0034](0034-feat-admin-reports-screen.md) | `feat` | 運営向けの通報一覧の画面を実装する | [#76](https://github.com/yama-shu/575-sns/issues/76) |
 | [0035](0035-test-e2e.md) | `test` | E2E テストで主要な導線を確認する | [#78](https://github.com/yama-shu/575-sns/issues/78) |
 | [0036](0036-fix-integration-test-db-guard.md) | `fix` | 結合テストが開発用のデータベースを消すのを防ぐ | [#80](https://github.com/yama-shu/575-sns/issues/80) |
+| [0037](0037-docs-backlog-corrections.md) | `docs` | バックログの記述を実態に合わせる | [#82](https://github.com/yama-shu/575-sns/issues/82) |
 
 ### MVP 後（起票済みのもの）
 
