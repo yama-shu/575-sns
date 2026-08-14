@@ -192,6 +192,11 @@ jobs:
         with:
           go-version-file: api/go.mod
           cache-dependency-path: api/go.sum
+          # **最新のパッチ版を取りに行く。** go.mod は `go 1.26` としか書いておらず、
+          # 指定がないとランナーに同梱された版（古いことがある）が使われる。
+          # govulncheck は標準ライブラリの脆弱性も検出するため、
+          # パッチ版が古いままだと修正済みの問題で落ち続ける。
+          check-latest: true
 
       - name: 整形の確認
         run: |
