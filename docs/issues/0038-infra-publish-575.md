@@ -113,6 +113,39 @@ OS 250 + Docker/oil_game 93 + web 35 + api 3 + prosody 128 + postgres 40 ≈ 550
 | `API_SECURE_COOKIE` | `false` | **`true`**（[README](../../README.md) の設定表） |
 | `WEB_PORT` / `API_PORT` | `3000` / `8080` | **`127.0.0.1:3000` / `127.0.0.1:8080`**（下記） |
 
+### `.env` の雛形
+
+```bash
+# ---- PostgreSQL ----
+POSTGRES_USER=sns575
+POSTGRES_PASSWORD=<生成した値に置き換える>
+POSTGRES_DB=sns575
+
+# ---- api ----
+API_LOG_LEVEL=info
+# **本番では必ず true**（README の設定表）
+API_SECURE_COOKIE=true
+
+# ---- prosody ----
+PROSODY_LOG_LEVEL=info
+PROSODY_WORKERS=1
+
+# ---- 公開ポート ----
+# **127.0.0.1 に束縛する。** 既定のままだと 0.0.0.0 に開く（下記）
+WEB_PORT=127.0.0.1:3000
+API_PORT=127.0.0.1:8080
+```
+
+パスワードは手で考えず生成する。
+
+```bash
+openssl rand -base64 32
+```
+
+`POSTGRES_PORT` と `PROSODY_PORT` は書かない。`compose.yaml` は
+これらを公開しておらず（公開しているのは `compose.override.yaml` のみ）、
+本番では読ませない。
+
 ### api のポートが公開されている
 
 `compose.yaml` は api を `"${API_PORT:-8080}:8080"` で公開している。
@@ -148,6 +181,85 @@ API_PORT=127.0.0.1:8080
 Caddy を足すと競合する（[#82](https://github.com/yama-shu/575-sns/issues/82)）。
 
 vhost を1つ足し、`localhost:3000` へ流す。
+
+### nginx の設定（当日はこれを貼る）
+
+**2ファイルに分ける。** レート制限の定義（`limit_req_zone`）は `http` コンテキストに
+置く必要があり、vhost の中には書けない。
+
+#### `/etc/nginx/conf.d/575-limits.conf`
+
+```nginx
+# 認証まわり。bcrypt（コスト12）が動くため、ここが無防備だと CPU を奪われる。
+limit_req_zone $binary_remote_addr zone=auth575:1m  rate=10r/m;
+
+# 通常の閲覧。1ページの表示で複数の要求が飛ぶため、余裕を持たせる。
+limit_req_zone $binary_remote_addr zone=web575:10m rate=30r/s;
+```
+
+#### `/etc/nginx/sites-available/575.ramen-oil.com`
+
+**80 番だけを書く。** 443 の設定と HTTP からの転送は `certbot --nginx` が追記する。
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name 575.ramen-oil.com;
+
+    access_log /var/log/nginx/575.access.log;
+    error_log  /var/log/nginx/575.error.log;
+
+    # 静的ファイルは制限をかけない。1ページで数十件飛ぶため、
+    # 通常の閲覧が誤って弾かれる。
+    location /_next/static/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+
+    # 登録とログイン。JavaScript の有無にかかわらず、この経路に POST される。
+    location = /login  { limit_req zone=auth575 burst=5 nodelay; include /etc/nginx/snippets/575-proxy.conf; }
+    location = /signup { limit_req zone=auth575 burst=5 nodelay; include /etc/nginx/snippets/575-proxy.conf; }
+
+    location / {
+        limit_req zone=web575 burst=60 nodelay;
+        include /etc/nginx/snippets/575-proxy.conf;
+    }
+}
+```
+
+#### `/etc/nginx/snippets/575-proxy.conf`
+
+```nginx
+proxy_pass http://127.0.0.1:3000;
+proxy_http_version 1.1;
+proxy_set_header Host              $host;
+proxy_set_header X-Real-IP         $remote_addr;
+proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+有効化する。
+
+```bash
+sudo ln -s /etc/nginx/sites-available/575.ramen-oil.com /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+> **`nginx -t` が通らないまま reload しない。** 既存の oil_game の vhost も
+> 同じプロセスが読んでいるため、構文誤りは両方を落とす。
+
+#### 制限値は公開後に確かめる
+
+上の値は**初期値であり、実測していない**。公開後にログを見て、
+通常の閲覧が弾かれていないことを確認する。
+
+```bash
+sudo grep "limiting requests" /var/log/nginx/575.error.log | tail -20
+```
+
+自分で操作して弾かれるようなら緩める。スキャンだけが弾かれている状態が正しい。
 
 ### レート制限が無い
 
@@ -196,8 +308,9 @@ UPDATE users SET is_admin = true WHERE handle = '...';
 ### 1. 事前（8/16 まで）
 
 - [ ] `ramen-oil.com` の A レコードの TTL を 3600 → 300 に下げる（切り替えを速くする）
-- [ ] `.env` の内容を決める
-- [ ] nginx の vhost 設定を書いておく
+- [x] `.env` の雛形を用意する（[下記](#env-の雛形)）
+- [x] nginx の設定を書いておく（[下記](#nginx-の設定当日はこれを貼る)）
+- [ ] `POSTGRES_PASSWORD` を生成して控える
 - [ ] 外形監視のアカウントを用意する
 
 ### 2. 公開当日
@@ -207,26 +320,38 @@ UPDATE users SET is_admin = true WHERE handle = '...';
 git clone https://github.com/yama-shu/575-sns.git
 cd 575-sns
 
-# 2) .env（本番の値）
+# 2) .env（本番の値。雛形は下記）
 cp .env.example .env
-# POSTGRES_PASSWORD / API_SECURE_COOKIE / WEB_PORT / API_PORT を編集
+vi .env
 
 # 3) 起動（compose.override.yaml を読ませない）
 docker compose -f compose.yaml up -d --build --wait
 docker compose -f compose.yaml ps
 
-# 4) 内部から疎通
+# 4) 内部から疎通（ここが通らないうちは nginx へ進まない）
 curl -sI http://127.0.0.1:3000/ | head -3
 curl -s  http://127.0.0.1:8080/readyz
 
-# 5) nginx
+# 5) 外に開いていないことの確認（別の端末から。応答しないのが正しい）
+#    curl --max-time 5 http://160.251.xxx.xxx:8080/readyz
+
+# 6) nginx の設定を置く（内容は下記の3ファイル）
+sudo vi /etc/nginx/conf.d/575-limits.conf
+sudo vi /etc/nginx/snippets/575-proxy.conf
+sudo vi /etc/nginx/sites-available/575.ramen-oil.com
+sudo ln -s /etc/nginx/sites-available/575.ramen-oil.com /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 
-# 6) 証明書
+# 7) oil_game が無事であること（先に確かめる）
+curl -sI https://ramen-oil.com | head -3
+
+# 8) 証明書（443 の設定と HTTP からの転送はこれが追記する）
 sudo certbot --nginx -d 575.ramen-oil.com
 
-# 7) 外から
+# 9) 外から
 curl -sI https://575.ramen-oil.com | head -3
+openssl s_client -connect 575.ramen-oil.com:443 -servername 575.ramen-oil.com </dev/null 2>/dev/null \
+  | openssl x509 -noout -issuer -dates
 ```
 
 ### 3. 公開後
