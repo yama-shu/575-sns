@@ -55,6 +55,7 @@ jobs:
               - '.github/workflows/ci.yml'
               - 'compose.yaml'
               - 'compose.override.yaml'
+              - 'compose.prod.yaml'
               - '.env.example'
               - 'scripts/**'
             prosody:
