@@ -1,0 +1,57 @@
+# ホストの CPU・メモリ・ディスクを取る。
+#
+# **DaemonSet にする。** ノードごとに1つ必要であり、Deployment では
+# 同じノードに複数載ったり、載らないノードが出たりする。
+# 単一ノードでは差が出ないが、ノードを増やしたときに自動で追随する。
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      enableServiceLinks: false
+      # ホストの値を取るため、ホストの名前空間を見る。
+      hostPID: true
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v1.8.2
+          args:
+            - --path.procfs=/host/proc
+            - --path.sysfs=/host/sys
+            - --path.rootfs=/host/root
+            # コンテナの仮想ファイルシステムを除く。数が膨らみ、読みづらくなる。
+            - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/.+)($|/)
+          ports:
+            - name: metrics
+              containerPort: 9100
+          volumeMounts:
+            - { name: proc, mountPath: /host/proc, readOnly: true }
+            - { name: sys, mountPath: /host/sys, readOnly: true }
+            - { name: root, mountPath: /host/root, readOnly: true, mountPropagation: HostToContainer }
+          resources:
+            requests: { memory: "24Mi", cpu: "10m" }
+            limits: { memory: "64Mi" }
+      volumes:
+        - { name: proc, hostPath: { path: /proc } }
+        - { name: sys, hostPath: { path: /sys } }
+        - { name: root, hostPath: { path: / } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter
+  labels:
+    app: node-exporter
+spec:
+  selector:
+    app: node-exporter
+  ports:
+    - port: 9100
+      targetPort: metrics
