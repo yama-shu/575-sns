@@ -26,38 +26,38 @@
 
 ## やること
 
-- [ ] DNS に A レコードを追加する
-- [ ] `.env` を本番の値で用意する（[下記](#env-で必ず変える3項目)）
-- [ ] `docker compose -f compose.yaml` で起動する
-- [ ] nginx に vhost を足す（[下記](#nginx-は既存のものに相乗りする)）
-- [ ] certbot でサブドメインの証明書を取得する
-- [ ] 運営アカウントを付与する（[下記](#運営アカウントは-db-を直接更新する)）
+- [x] DNS に A レコードを追加する
+- [x] `.env` を本番の値で用意する（[下記](#env-で必ず変える3項目)）
+- [x] `docker compose -f compose.yaml` で起動する
+- [x] nginx に vhost を足す（[下記](#nginx-は既存のものに相乗りする)）
+- [x] certbot でサブドメインの証明書を取得する
+- [x] 運営アカウントを付与する（[下記](#運営アカウントは-db-を直接更新する)）
 - [ ] 初期の句を投稿する
 - [ ] 外形監視を開始する
-- [ ] README に本番の情報を追記する
+- [x] README に本番の情報を追記する
 
 ## 完了条件
 
 ### 公開
 
-- [ ] `https://575.ramen-oil.com` が **200** を返す
-- [ ] HTTP でアクセスすると HTTPS へリダイレクトされる
-- [ ] 証明書の発行者が Let's Encrypt である
-- [ ] **登録 → 投稿 → 閲覧が実際に通る**（本番環境で手で確認する）
-- [ ] 判定（prosody）が本番でも動く
+- [x] `https://575.ramen-oil.com` が **200** を返す
+- [x] HTTP でアクセスすると HTTPS へリダイレクトされる
+- [x] 証明書の発行者が Let's Encrypt である
+- [x] **登録 → 投稿 → 閲覧が実際に通る**（本番環境で手で確認する）
+- [x] 判定（prosody）が本番でも動く
 
 ### 安全
 
-- [ ] **api と web のポートが外部に開いていない**（[下記](#api-のポートが公開されている)）
-- [ ] `API_SECURE_COOKIE=true` になっている
-- [ ] DB のパスワードが既定値のままでない
-- [ ] nginx に `limit_req` を入れている（[下記](#レート制限が無い)）
+- [x] **api と web のポートが外部に開いていない**（[下記](#api-のポートが公開されている)）
+- [x] `API_SECURE_COOKIE=true` になっている
+- [x] DB のパスワードが既定値のままでない
+- [x] nginx に `limit_req` を入れている（[下記](#レート制限が無い)）
 
 ### oil_game を壊さない
 
-- [ ] `nginx -t` が通る
+- [x] `nginx -t` が通る
 - [ ] **ramen-oil.com が変わらず 200 を返す**
-- [ ] メモリに余裕がある（`free -h`）
+- [x] メモリに余裕がある（`free -h`）
 
 ### 記録
 
@@ -308,11 +308,11 @@ UPDATE users SET is_admin = true WHERE handle = '...';
 
 ### 1. 事前（8/16 まで）
 
-- [ ] `ramen-oil.com` の A レコードの TTL を 3600 → 300 に下げる（切り替えを速くする）
+- [x] `ramen-oil.com` の A レコードの TTL を 3600 → 300 に下げる（切り替えを速くする）
 - [x] `.env` の雛形を用意する（[下記](#env-の雛形)）
 - [x] nginx の設定を書いておく（[下記](#nginx-の設定当日はこれを貼る)）
-- [ ] `POSTGRES_PASSWORD` を生成して控える
-- [ ] **GHCR のパッケージを public にする**（[#86](https://github.com/yama-shu/575-sns/issues/86)。private のままだとサーバーで `docker login` が要る）
+- [x] `POSTGRES_PASSWORD` を生成して控える
+- [x] **GHCR のパッケージを public にする**（[#86](https://github.com/yama-shu/575-sns/issues/86)）。作成時点で public だった
 - [ ] 外形監視のアカウントを用意する
 
 ### 2. 公開当日
@@ -359,11 +359,11 @@ openssl s_client -connect 575.ramen-oil.com:443 -servername 575.ramen-oil.com </
 
 ### 3. 公開後
 
-- [ ] 運営アカウントの付与
+- [x] 運営アカウントの付与
 - [ ] 初期の句の投稿
 - [ ] 外形監視の開始
 - [ ] `pg_dump` を1回取る
-- [ ] `restart: unless-stopped` が効いていることの確認（`docker inspect`）
+- [x] `restart: unless-stopped` が効いていることの確認（`docker inspect`）
 - [ ] TTL を 3600 に戻す
 
 ## 参考
