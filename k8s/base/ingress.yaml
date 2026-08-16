@@ -1,0 +1,22 @@
+# 外部からの入口。
+#
+# **web にのみ向ける。** ブラウザは web としか通信しない
+# （基本設計 01 §6）。api と prosody は ClusterIP のままにする。
+#
+# ホスト名は overlays で差し替える。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+spec:
+  rules:
+    - host: 575.example.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 3000

@@ -1,0 +1,64 @@
+# 判定エンジン。
+#
+# **replicas を base で指定しない。** overlays の patch で与える
+# （ADR-0007 の検証項目「replicas を増減しても正しく動作するか」）。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prosody
+spec:
+  selector:
+    matchLabels:
+      app: prosody
+  template:
+    metadata:
+      labels:
+        app: prosody
+    spec:
+      # web と同じ理由（#91）。api からの呼び出しを取りこぼさない。
+      terminationGracePeriodSeconds: 30
+      # **Kubernetes が注入する環境変数を無効にする。**
+      # 既定では Service 名から PROSODY_PORT=tcp://10.43.x.x:8000 のような
+      # 変数が注入され、アプリ自身の同名の設定を上書きする（#91 で実際に落ちた）。
+      enableServiceLinks: false
+      containers:
+        - name: prosody
+          image: ghcr.io/yama-shu/575-prosody
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef: { name: app-config }
+          # **readiness は /readyz を見る。** 辞書のロードが終わるまで
+          # false を返す。/healthz はプロセスの生存のみを示す。
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+          # 辞書のロードに時間がかかる。起動が遅いことを理由に
+          # 再起動されないよう、startupProbe で猶予を与える。
+          startupProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+            failureThreshold: 24
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          # 実測 126.2 MiB（ADR-0007 §10）。辞書が常駐するため下限が高い。
+          resources:
+            requests: { memory: "160Mi", cpu: "100m" }
+            limits: { memory: "256Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prosody
+spec:
+  selector:
+    app: prosody
+  ports:
+    - port: 8000
+      targetPort: http

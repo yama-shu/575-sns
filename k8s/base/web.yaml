@@ -1,0 +1,58 @@
+# 画面描画と SSR。Ingress の宛先。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      # **Endpoints から外れるのを待ってから終了する。**
+      # Pod の削除は「Endpoints の更新」と「コンテナへの SIGTERM」が並行して
+      # 進むため、待たないと Ingress が終了中の Pod に転送し 502 になる
+      # （#91 で replicas を減らしたときに実際に発生した）。
+      terminationGracePeriodSeconds: 30
+      # **Kubernetes が注入する環境変数を無効にする。**
+      # 既定では Service 名から PROSODY_PORT=tcp://10.43.x.x:8000 のような
+      # 変数が注入され、アプリ自身の同名の設定を上書きする（#91 で実際に落ちた）。
+      enableServiceLinks: false
+      containers:
+        - name: web
+          image: ghcr.io/yama-shu/575-web
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef: { name: app-config }
+          # web に専用のヘルスチェック経路は無い。全体タイムラインは
+          # 未ログインでも 200 を返すため、これを使う。
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 20
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          # 実測 76.1 MiB（ADR-0007 §10）。
+          resources:
+            requests: { memory: "96Mi", cpu: "100m" }
+            limits: { memory: "192Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 3000
+      targetPort: http

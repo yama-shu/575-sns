@@ -1,0 +1,88 @@
+# PostgreSQL。
+#
+# **StatefulSet にする。** Deployment だと Pod の入れ替え時に
+# 新旧が同じボリュームを掴む瞬間が生じうる。StatefulSet は
+# 「前の Pod を終了させてから次を作る」ため、単一の書き込み手を保てる。
+#
+# レプリカは 1 に固定する。PostgreSQL のレプリケーションは
+# ADR-0007 の範囲外であり、複製すると壊れる。
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      # **Kubernetes が注入する環境変数を無効にする。**
+      # 既定では Service 名から PROSODY_PORT=tcp://10.43.x.x:8000 のような
+      # 変数が注入され、アプリ自身の同名の設定を上書きする（#91 で実際に落ちた）。
+      enableServiceLinks: false
+      containers:
+        - name: postgres
+          image: postgres:18-bookworm
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef: { name: app-config, key: POSTGRES_USER }
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef: { name: app-config, key: POSTGRES_DB }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: db-secret, key: POSTGRES_PASSWORD }
+            # 日本語を扱うため照合順序を明示する（compose.yaml と揃える）
+            - name: POSTGRES_INITDB_ARGS
+              value: "--encoding=UTF8 --locale=C"
+            # PostgreSQL 18 の公式イメージはメジャーバージョン別の
+            # サブディレクトリにデータを置く。マウント先を1つ上にするため、
+            # データディレクトリを明示する。
+            - name: PGDATA
+              value: /var/lib/postgresql/18/docker
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          # 実測 46.8 MiB（ADR-0007 §10）。
+          # ページキャッシュに使う余地を持たせるため limit は厚めにする。
+          resources:
+            requests: { memory: "64Mi", cpu: "50m" }
+            limits: { memory: "256Mi" }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: postgres
