@@ -1,0 +1,47 @@
+# 本番（ConoHa VPS の k3s）用。
+#
+# **イメージは GHCR から取る。** サーバー上でビルドしない（ADR-0007）。
+# タグは配布された版に合わせて `newTag` を書き換えるか、
+# kustomize edit set image で指定する。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sns575
+
+resources:
+  - ../../base
+
+images:
+  - name: ghcr.io/yama-shu/575-web
+    newTag: latest
+  - name: ghcr.io/yama-shu/575-api
+    newTag: latest
+  - name: ghcr.io/yama-shu/575-prosody
+    newTag: latest
+
+# ADR-0007 のメモリ予算に合わせた構成。
+# prosody はワーカー1 の Pod を2つ立てる。
+replicas:
+  - name: web
+    count: 2
+  - name: api
+    count: 2
+  - name: prosody
+    count: 2
+
+patches:
+  - target: { kind: Ingress, name: web }
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: 575.ramen-oil.com
+
+# **秘密情報はリポジトリに入れない**（NFR-04-07）。
+# secret.env は .gitignore で除外している。作り方は k8s/README.md を参照。
+#
+# 名前にハッシュが付く。中身を変えると Secret 名が変わり、
+# 参照している Pod が作り直される。変更が反映されないまま動き続けることを防ぐ。
+secretGenerator:
+  - name: db-secret
+    envs:
+      - secret.env
