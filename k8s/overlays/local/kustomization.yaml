@@ -1,0 +1,65 @@
+# k3d（ローカル）用。
+#
+# **自分でビルドしたイメージを使う。** GHCR のイメージは linux/amd64 で、
+# 開発機が Apple Silicon の場合はエミュレーションになる。
+# `k3d image import` でクラスタに取り込んだものを参照する。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sns575
+
+resources:
+  - ../../base
+
+images:
+  - name: ghcr.io/yama-shu/575-web
+    newName: 575-web
+    newTag: runtime
+  - name: ghcr.io/yama-shu/575-api
+    newName: 575-api
+    newTag: runtime
+  - name: ghcr.io/yama-shu/575-prosody
+    newName: 575-prosody
+    newTag: runtime
+
+# **replicas は base に書かず、ここで与える。**
+# base に決め打ちの値があると、環境ごとに patch で上書きすることになり、
+# 「どちらが効いているか」が読み取りにくくなる。
+replicas:
+  - name: web
+    count: 1
+  - name: api
+    count: 1
+  - name: prosody
+    count: 1
+
+patches:
+  # ローカルは HTTP のみ。localhost で引ける名前にする。
+  - target: { kind: Ingress, name: web }
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: 575.localhost
+  # 手元では HTTPS で終端しないため、Secure Cookie を外す。
+  # これを外さないとログインできない。
+  - target: { kind: ConfigMap, name: app-config }
+    patch: |
+      - op: replace
+        path: /data/API_SECURE_COOKIE
+        value: "false"
+  # 手元では登録を速くする。本番は 12（ConfigMap の既定）。
+  - target: { kind: ConfigMap, name: app-config }
+    patch: |
+      - op: replace
+        path: /data/API_BCRYPT_COST
+        value: "4"
+
+# **秘密情報はリポジトリに入れない**（NFR-04-07）。
+# secret.env は .gitignore で除外している。作り方は k8s/README.md を参照。
+#
+# 名前にハッシュが付く。中身を変えると Secret 名が変わり、
+# 参照している Pod が作り直される。変更が反映されないまま動き続けることを防ぐ。
+secretGenerator:
+  - name: db-secret
+    envs:
+      - secret.env

@@ -1,0 +1,31 @@
+# 期限切れセッションの削除（ADR-0006）。
+#
+# **api の中でタイマーを回さない。** Pod の数だけ同じ削除が走る。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cleanup
+spec:
+  # 毎日 04:00（UTC）。利用の少ない時間帯に寄せる。
+  schedule: "0 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          containers:
+            - name: cleanup
+              image: ghcr.io/yama-shu/575-api
+              command: ["/cleanup"]
+              env:
+                - name: API_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef: { name: db-secret, key: API_DATABASE_URL }
+              resources:
+                requests: { memory: "32Mi", cpu: "50m" }
+                limits: { memory: "128Mi" }
