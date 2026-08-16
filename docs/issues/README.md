@@ -227,6 +227,7 @@ flowchart LR
 | [0038](0038-infra-publish-575.md) | `infra` | 575 を HTTPS で一般公開する | [#84](https://github.com/yama-shu/575-sns/issues/84) |
 | [0039](0039-infra-ghcr-cd.md) | `infra` | イメージを GHCR へ配布し、サーバーは pull だけにする | [#86](https://github.com/yama-shu/575-sns/issues/86) |
 | [0040](0040-chore-dependency-vulnerabilities.md) | `chore` | 依存の脆弱性検査の失敗を解消する | [#88](https://github.com/yama-shu/575-sns/issues/88) |
+| [0041](0041-infra-k8s-manifests.md) | `infra` | K8s マニフェストを作成し、ローカルの k3d で実証する | [#91](https://github.com/yama-shu/575-sns/issues/91) |
 
 ### MVP 後（起票済みのもの）
 
