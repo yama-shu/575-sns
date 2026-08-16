@@ -1,0 +1,64 @@
+# 外形監視。**公開中のサイトに外から HTTP で当てる。**
+#
+# アプリに /metrics が無いため、まずここから始める。
+# 「落ちていないか」は運用で最初に要る情報である。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blackbox-config
+data:
+  blackbox.yml: |
+    modules:
+      http_2xx:
+        prober: http
+        timeout: 10s
+        http:
+          valid_status_codes: [200]
+          # HTTPS で終端していることまで確かめる
+          fail_if_not_ssl: true
+          preferred_ip_protocol: ip4
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blackbox-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: blackbox-exporter
+  template:
+    metadata:
+      labels:
+        app: blackbox-exporter
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: blackbox-exporter
+          image: prom/blackbox-exporter:v0.25.0
+          args: ["--config.file=/etc/blackbox/blackbox.yml"]
+          ports:
+            - name: http
+              containerPort: 9115
+          volumeMounts:
+            - name: config
+              mountPath: /etc/blackbox
+          readinessProbe:
+            httpGet: { path: /-/healthy, port: http }
+          resources:
+            requests: { memory: "24Mi", cpu: "10m" }
+            limits: { memory: "64Mi" }
+      volumes:
+        - name: config
+          configMap: { name: blackbox-config }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: blackbox-exporter
+spec:
+  selector:
+    app: blackbox-exporter
+  ports:
+    - port: 9115
+      targetPort: http
