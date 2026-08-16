@@ -1,0 +1,20 @@
+# Grafana だけを外に出す。
+#
+# **Prometheus は出さない。** 認証が無く、出すと監視の内容が誰でも見られる。
+# 必要なときは kubectl port-forward で見る。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+spec:
+  rules:
+    - host: grafana.example.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3000

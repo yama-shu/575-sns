@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+
+    scrape_configs:
+      # 自分自身
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      # ホストの資源。DaemonSet なのでノードが増えれば自動で増える。
+      - job_name: node-exporter
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [monitoring]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: node-exporter
+          - source_labels: [__meta_kubernetes_endpoint_node_name]
+            target_label: node
+
+      # **外形監視。** 公開中のサイトへ外から HTTP で当てる。
+      # blackbox-exporter に URL を渡し、その結果を取り込む。
+      - job_name: blackbox
+        metrics_path: /probe
+        params:
+          module: [http_2xx]
+        static_configs:
+          - targets:
+              - https://575.ramen-oil.com
+              - https://ramen-oil.com
+        relabel_configs:
+          # 監視対象の URL を blackbox-exporter のクエリに渡す
+          - source_labels: [__address__]
+            target_label: __param_target
+          - source_labels: [__param_target]
+            target_label: instance
+          # 実際の接続先は blackbox-exporter にする
+          - target_label: __address__
+            replacement: blackbox-exporter:9115

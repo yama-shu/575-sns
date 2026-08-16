@@ -90,3 +90,4 @@ api/tmp/
 
 # ---- k8s の秘密情報（環境ごとに手元で作る） ----
 k8s/overlays/*/secret.env
+k8s/monitoring/overlays/*/secret.env
