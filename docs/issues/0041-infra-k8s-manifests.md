@@ -67,7 +67,7 @@
 
 ### 共通
 
-- [ ] `./scripts/check.sh` が通る
+- [x] `./scripts/check.sh` が通る
 
 ## やらないこと
 
