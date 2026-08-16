@@ -1,0 +1,20 @@
+# 本番（ConoHa VPS の k3s）用。**まだ適用していない。**
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: monitoring
+
+resources:
+  - ../../base
+
+patches:
+  - target: { kind: Ingress, name: grafana }
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: grafana.ramen-oil.com
+
+secretGenerator:
+  - name: grafana-secret
+    envs:
+      - secret.env
