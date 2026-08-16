@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# **namespace は base に置かない。**
+# base に置くと、そこにある資源だけが先に名前空間を持つ。overlays で
+# generator が作る Secret とは名前空間が食い違い、
+# secretKeyRef の名前が書き換わらなくなる（存在しない Secret を参照する）。
+# 名前空間は overlays で与える。
+
+resources:
+  - namespace.yaml
+  - config.yaml
+  - postgres.yaml
+  - prosody.yaml
+  - api.yaml
+  - web.yaml
+  - ingress.yaml
+  - migrate-job.yaml
+  - cleanup-cronjob.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: sns575
+
+# **Secret は overlays で作る。** base に置くと、base をビルドするだけで
+# 秘密ファイルが必要になる。環境ごとに値が違うものでもある。
