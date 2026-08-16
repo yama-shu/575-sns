@@ -44,7 +44,7 @@ B はアプリの改修を伴うため、別 Issue とする。
 - [x] Grafana に Ingress で到達できる
 - [x] **Grafana の管理者パスワードが Secret**（リポジトリに入れない）
 - [x] すべてのコンテナに `resources` がある
-- [ ] `./scripts/check.sh` が通る
+- [x] `./scripts/check.sh` が通る
 
 ## やらないこと
 
