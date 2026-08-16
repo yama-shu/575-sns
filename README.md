@@ -18,16 +18,20 @@
 
 ## 現在のステータス
 
+**公開中: https://575.ramen-oil.com**
+
 | フェーズ | 状態 |
 | --- | --- |
 | 要件定義 | ✅ 完了 |
 | 基本設計 | ✅ 完了 |
 | 詳細設計 | ✅ 完了 |
-| 実装 | 🔵 進行中（M2 API 基盤） |
+| 実装 | ✅ 完了（M0〜M4） |
+| 公開 | 🔵 進行中（M5） |
 
-M0（開発基盤）と M1（判定エンジン）は完了しています。
-現在は **M2（API 基盤）** の段階で、認証・判定 API・投稿までが動きます。
-タイムラインといいね・フォローは M3、画面は M4 です
+M0（開発基盤）から M4（画面）までが完了し、[基本設計 04](docs/design/basic/04-screens.md) の 13 画面が揃っています。
+2026-08-16 に ConoHa VPS 上で HTTPS 公開しました。
+
+M5 では k3s への載せ替えと監視の構築が残っています
 （[マイルストーン](https://github.com/yama-shu/575-sns/milestones)）。
 
 ---
@@ -929,6 +933,27 @@ IMAGE_TAG=<コミットの SHA> docker compose -f compose.yaml -f compose.prod.y
 
 > **`compose.yaml` は変更していません。** あちらは手元で本番相当を動かすための
 > ファイルであり、E2E もそれを使います。GHCR の名前を書き込むと手元でビルドできなくなります。
+
+#### 本番環境
+
+| 項目 | 値 |
+| --- | --- |
+| URL | https://575.ramen-oil.com |
+| ホスティング | ConoHa VPS 2 GB / 2 vCPU（[ADR-0007](docs/adr/0007-hosting-conoha-vps.md)） |
+| OS | Ubuntu 24.04 LTS |
+| 構成 | docker compose + nginx（リバースプロキシ）+ certbot |
+| 証明書 | Let's Encrypt（`certbot.timer` が自動更新） |
+
+**k3s ではありません。** 目標構成は ADR-0007 のとおり k3s ですが、
+公開を後続作業の完了に紐づけないため、compose で先に公開しています。
+
+**api と web のポートは `127.0.0.1` に束縛しています。** `compose.yaml` の既定は
+`0.0.0.0` であり、そのままでは api が HTTPS を経由せず外部から到達可能になります。
+
+```
+WEB_PORT=127.0.0.1:3000
+API_PORT=127.0.0.1:8080
+```
 
 #### 手元でリリース版のイメージを作る
 
