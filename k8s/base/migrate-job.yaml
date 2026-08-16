@@ -1,0 +1,43 @@
+# スキーマのマイグレーション。
+#
+# **api の起動時に適用しない**（基本設計 03 §6）。api が複数 Pod に
+# なるため、起動時に適用すると Pod 同士で競合する。
+#
+# **適用してから api を入れ替える。** 適用の完了を待つ手段は
+# kustomize には無いため、手順として README に書く。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+spec:
+  # 失敗したまま再試行を重ねると dirty state からの復旧が難しくなる。
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      # **postgres を待つ。** kubectl apply は順序を保証しないため、
+      # 待たないと connection refused で失敗する（#91 で実際に失敗した）。
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:18-bookworm
+          command:
+            - sh
+            - -c
+            - until pg_isready -h postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB"; do sleep 2; done
+          envFrom:
+            - configMapRef: { name: app-config }
+          resources:
+            requests: { memory: "16Mi", cpu: "10m" }
+            limits: { memory: "64Mi" }
+      containers:
+        - name: migrate
+          image: ghcr.io/yama-shu/575-api
+          command: ["/migrate", "up"]
+          env:
+            - name: API_DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: db-secret, key: API_DATABASE_URL }
+          resources:
+            requests: { memory: "32Mi", cpu: "50m" }
+            limits: { memory: "128Mi" }

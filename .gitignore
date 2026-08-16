@@ -87,3 +87,6 @@ htmlcov/
 api/tmp/
 /logs/
 *.log
+
+# ---- k8s の秘密情報（環境ごとに手元で作る） ----
+k8s/overlays/*/secret.env
