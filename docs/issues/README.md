@@ -229,6 +229,7 @@ flowchart LR
 | [0040](0040-chore-dependency-vulnerabilities.md) | `chore` | 依存の脆弱性検査の失敗を解消する | [#88](https://github.com/yama-shu/575-sns/issues/88) |
 | [0041](0041-infra-k8s-manifests.md) | `infra` | K8s マニフェストを作成し、ローカルの k3d で実証する | [#91](https://github.com/yama-shu/575-sns/issues/91) |
 | [0042](0042-infra-monitoring-manifests.md) | `infra` | 監視スタックのマニフェストを作成し、k3d で実証する | [#93](https://github.com/yama-shu/575-sns/issues/93) |
+| [0044](0044-chore-next-security-update.md) | `chore` | Next.js の脆弱性に対応する | [#97](https://github.com/yama-shu/575-sns/issues/97) |
 
 ### MVP 後（起票済みのもの）
 
